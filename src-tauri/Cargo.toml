@@ -1,0 +1,19 @@
+[package]
+name = "edge-todos"
+version = "0.1.0"
+description = "A cross-platform edge-hiding todo widget"
+authors = ["Edge Todos"]
+edition = "2021"
+
+[lib]
+name = "edge_todos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.1", features = [] }
+tauri-plugin-opener = "2.5.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
