@@ -10,6 +10,7 @@ import {
   ChevronUp,
   ImagePlus,
   Import,
+  Info,
   List,
   MoveDown,
   MoveUp,
@@ -53,6 +54,7 @@ function App() {
   const [pageManagerOpen, setPageManagerOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const autoHideTimerRef = useRef<number | undefined>(undefined);
   const groupOpenerRef = useRef<Map<string, () => void>>(new Map());
@@ -553,6 +555,9 @@ function App() {
               {state.windowPrefs.hidden ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
             </button>
           )}
+          <button className="icon-button" onClick={() => setAboutOpen(true)} title="关于">
+            <Info size={18} />
+          </button>
           <button className="icon-button" onClick={() => setPageManagerOpen(true)} title="页签管理">
             <List size={18} />
           </button>
@@ -664,6 +669,8 @@ function App() {
           }}
         />
       )}
+
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
 
       <input
         ref={importInputRef}
@@ -1720,6 +1727,26 @@ function isBackupLike(value: unknown) {
     value &&
       typeof value === "object" &&
       ("pages" in value || "todos" in value || "templates" in value || "schemaVersion" in value),
+  );
+}
+
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="confirm-backdrop"
+      data-testid="about-backdrop"
+      onClick={onClose}
+    >
+      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+        <h3>Edge Todos</h3>
+        <p>版本 {import.meta.env.VITE_APP_VERSION}</p>
+        <p>轻量跨平台桌面待办小工具，支持优先级分组、图片附件和贴边隐藏。</p>
+        <p style={{ fontSize: "11.5px", color: "#94a3b8" }}>MIT 许可证开源</p>
+        <div className="confirm-actions">
+          <button onClick={onClose}>关闭</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

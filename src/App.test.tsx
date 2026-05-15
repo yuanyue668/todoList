@@ -318,3 +318,54 @@ describe("F3 — Keyboard Shortcuts", () => {
     expect(screen.queryByPlaceholderText("添加到⭐ 中")).not.toBeInTheDocument();
   });
 });
+
+describe("F7 — About Dialog", () => {
+  beforeEach(() => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        schemaVersion: 2,
+        templates: [
+          {
+            id: "matrix",
+            name: "四象限优先级",
+            priorities: [{ id: "p1", name: "🔥 高", order: 0 }],
+          },
+        ],
+        pages: [
+          {
+            id: "page-1",
+            title: "待办事项",
+            color: "#f8fafc",
+            templateId: "matrix",
+            todos: [],
+          },
+        ],
+        activePageId: "page-1",
+        windowPrefs: { edge: null, hidden: false },
+      })
+    );
+  });
+
+  afterEach(() => { localStorage.clear(); });
+
+  it("opens about dialog when Info button is clicked", () => {
+    render(<App />);
+    expect(screen.queryByText("Edge Todos")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("关于"));
+
+    expect(screen.getByText("Edge Todos")).toBeInTheDocument();
+    expect(screen.getByText(/版本/)).toBeInTheDocument();
+  });
+
+  it("closes about dialog when backdrop is clicked", () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle("关于"));
+    expect(screen.getByText("Edge Todos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("about-backdrop"));
+
+    expect(screen.queryByText("Edge Todos")).not.toBeInTheDocument();
+  });
+});
