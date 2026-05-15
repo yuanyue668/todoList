@@ -258,3 +258,63 @@ describe("F2 — Group Collapse/Expand", () => {
     expect(screen.getByText("任务 A")).toBeVisible();
   });
 });
+
+describe("F3 — Keyboard Shortcuts", () => {
+  beforeEach(() => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        schemaVersion: 2,
+        templates: [
+          {
+            id: "matrix",
+            name: "四象限优先级",
+            priorities: [
+              { id: "p1", name: "🔥 高", order: 0 },
+              { id: "p2", name: "⭐ 中", order: 1 },
+            ],
+          },
+        ],
+        pages: [
+          {
+            id: "page-1",
+            title: "待办事项",
+            color: "#f8fafc",
+            templateId: "matrix",
+            todos: [],
+          },
+        ],
+        activePageId: "page-1",
+        windowPrefs: { edge: null, hidden: false },
+      })
+    );
+  });
+
+  afterEach(() => { localStorage.clear(); });
+
+  it("opens first group composer on Ctrl+Enter", () => {
+    render(<App />);
+    expect(screen.queryByPlaceholderText(/添加到/)).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+
+    expect(screen.getByPlaceholderText("添加到🔥 高")).toBeInTheDocument();
+  });
+
+  it("opens second group composer on Ctrl+2", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "2", ctrlKey: true });
+
+    expect(screen.getByPlaceholderText("添加到⭐ 中")).toBeInTheDocument();
+  });
+
+  it("does not trigger when an input is focused", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const input = screen.getByPlaceholderText("添加到🔥 高");
+    input.focus();
+
+    fireEvent.keyDown(window, { key: "2", ctrlKey: true });
+    expect(screen.queryByPlaceholderText("添加到⭐ 中")).not.toBeInTheDocument();
+  });
+});

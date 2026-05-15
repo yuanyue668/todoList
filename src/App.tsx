@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGemoji from "remark-gemoji";
 import remarkGfm from "remark-gfm";
@@ -55,6 +55,16 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const autoHideTimerRef = useRef<number | undefined>(undefined);
+  const groupOpenerRef = useRef<Map<string, () => void>>(new Map());
+
+  const registerGroupOpener = useCallback((priorityId: string, fn: () => void) => {
+    groupOpenerRef.current.set(priorityId, fn);
+  }, []);
+
+  const unregisterGroupOpener = useCallback((priorityId: string) => {
+    groupOpenerRef.current.delete(priorityId);
+  }, []);
+
   const [hasTauriWindow, setHasTauriWindow] = useState(false);
   const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
   const [dragOverTodoId, setDragOverTodoId] = useState<string | null>(null);
@@ -157,6 +167,39 @@ function App() {
       window.clearTimeout(timer);
     };
   }, [hasTauriWindow]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      const isMac = navigator.userAgent.includes("Mac");
+      const modKey = isMac ? event.metaKey : event.ctrlKey;
+      if (!modKey) return;
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const first = activePriorities[0];
+        if (first) groupOpenerRef.current.get(first.id)?.();
+        return;
+      }
+      const digit = parseInt(event.key, 10);
+      if (digit >= 1 && digit <= 9) {
+        const priority = activePriorities[digit - 1];
+        if (priority) {
+          event.preventDefault();
+          groupOpenerRef.current.get(priority.id)?.();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activePriorities]);
 
   function addTodo(priorityId: string, textValue: string, attachments: ImageAttachment[] = []) {
     const text = textValue.trim();
@@ -536,6 +579,8 @@ function App() {
             onDraggingTodoChange={setDraggingTodoId}
             dragOverTodoId={dragOverTodoId}
             onDragOverTodoChange={setDragOverTodoId}
+            onRegisterOpener={registerGroupOpener}
+            onUnregisterOpener={unregisterGroupOpener}
           />
         ))}
       </section>
@@ -649,6 +694,8 @@ function PriorityGroup({
   onDraggingTodoChange,
   dragOverTodoId,
   onDragOverTodoChange,
+  onRegisterOpener,
+  onUnregisterOpener,
 }: {
   priority: Priority;
   todos: Todo[];
@@ -663,6 +710,8 @@ function PriorityGroup({
   onDraggingTodoChange: (todoId: string | null) => void;
   dragOverTodoId: string | null;
   onDragOverTodoChange: (todoId: string | null) => void;
+  onRegisterOpener: (priorityId: string, fn: () => void) => void;
+  onUnregisterOpener: (priorityId: string) => void;
 }) {
   const [draftText, setDraftText] = useState(EMPTY_TEXT);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -670,10 +719,15 @@ function PriorityGroup({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftInputRef = useRef<HTMLInputElement | null>(null);
 
-  function openComposer() {
+  const openComposer = useCallback(() => {
     setComposerOpen(true);
     window.setTimeout(() => draftInputRef.current?.focus(), 0);
-  }
+  }, []);
+
+  useEffect(() => {
+    onRegisterOpener(priority.id, openComposer);
+    return () => onUnregisterOpener(priority.id);
+  }, [priority.id, openComposer, onRegisterOpener, onUnregisterOpener]);
 
   function submit(attachments: ImageAttachment[] = []) {
     const text = draftText.trim();
