@@ -5,40 +5,125 @@ import remarkGfm from "remark-gfm";
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ImagePlus,
-  LayoutGrid,
+  Import,
+  List,
   MoveDown,
   MoveUp,
   Plus,
+  Save,
   Settings,
   Trash2,
   X,
 } from "lucide-react";
-import { BUILT_IN_TEMPLATES } from "./defaults";
+import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
 import { detectDockedEdge, getCurrentTauriWindow, setWindowHidden } from "./tauriWindow";
-import { loadState, saveState } from "./storage";
-import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo } from "./types";
+import { loadState, normalizeState, saveState } from "./storage";
+import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
 
 const EMPTY_TEXT = "";
+const DEFAULT_PAGE_TITLE = "待办事项";
+const PAGE_COLORS = ["#f8fafc", "#f1f5f9", "#eef2ff", "#f0f9ff", "#ecfeff", "#f0fdf4", "#f7fee7", "#fff7ed", "#fdf2f8"];
+const AUTO_HIDE_DELAY_MS = 1500;
+
+type TemplateSettingsDraft = {
+  templates: PriorityTemplate[];
+  selectedTemplateId: string;
+};
+
+type ImagePreview = {
+  todoId: string;
+  attachmentId: string;
+};
+
+type ConfirmDialogState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  onConfirm: () => void;
+} | null;
 
 function App() {
   const [state, setState] = useState<AppState>(() => loadState());
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<ImageAttachment | null>(null);
+  const [pageManagerOpen, setPageManagerOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const autoHideTimerRef = useRef<number | undefined>(undefined);
   const [hasTauriWindow, setHasTauriWindow] = useState(false);
   const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
 
+  const activePage = useMemo(
+    () => state.pages.find((page) => page.id === state.activePageId) ?? state.pages[0],
+    [state.activePageId, state.pages],
+  );
+
   const activeTemplate = useMemo(
-    () => state.templates.find((template) => template.id === state.activeTemplateId) ?? state.templates[0],
-    [state.activeTemplateId, state.templates],
+    () => state.templates.find((template) => template.id === activePage.templateId) ?? state.templates[0],
+    [activePage.templateId, state.templates],
   );
 
   const activePriorities = useMemo(
     () => [...activeTemplate.priorities].sort((a, b) => a.order - b.order),
     [activeTemplate.priorities],
   );
+
+  const previewContext = useMemo(() => {
+    if (!previewImage) return null;
+    const todo = activePage.todos.find((item) => item.id === previewImage.todoId);
+    const attachmentIndex = todo?.attachments.findIndex((attachment) => attachment.id === previewImage.attachmentId) ?? -1;
+    const attachment = attachmentIndex >= 0 ? todo?.attachments[attachmentIndex] ?? null : null;
+    return todo && attachment ? { todo, attachment, attachmentIndex } : null;
+  }, [activePage.todos, previewImage]);
+
+  function saveTemplateSettings(draft: TemplateSettingsDraft) {
+    setState((current) => ({
+      ...current,
+      templates: draft.templates,
+    }));
+    setSettingsOpen(false);
+  }
+
+  function applyTemplateSettings(draft: TemplateSettingsDraft) {
+    setState((current) => {
+      const nextTemplate = draft.templates.find((template) => template.id === draft.selectedTemplateId) ?? draft.templates[0];
+      if (!nextTemplate) return current;
+
+      const fallbackPriority = getFirstPriority(nextTemplate);
+      const currentPage = getActivePage(current);
+      const templateChanged = nextTemplate.id !== currentPage.templateId;
+      const validPriorityIds = new Set(nextTemplate.priorities.map((priority) => priority.id));
+      const now = Date.now();
+
+      return {
+        ...current,
+        templates: draft.templates,
+        pages: current.pages.map((page) => {
+          if (page.id !== currentPage.id) return page;
+          return {
+            ...page,
+            templateId: nextTemplate.id,
+            todos: fallbackPriority
+              ? page.todos.map((todo) => {
+                  if (templateChanged) {
+                    return { ...todo, priorityId: fallbackPriority.id, updatedAt: now };
+                  }
+                  return validPriorityIds.has(todo.priorityId)
+                    ? todo
+                    : { ...todo, priorityId: fallbackPriority.id, updatedAt: now };
+                })
+              : page.todos,
+          };
+        }),
+      };
+    });
+    setSettingsOpen(false);
+  }
 
   useEffect(() => {
     saveState(state);
@@ -79,10 +164,10 @@ function App() {
     const now = Date.now();
     if (!priorityId) return;
 
-    setState((current) => ({
-      ...current,
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
       todos: [
-        ...current.todos,
+        ...page.todos,
         {
           id: crypto.randomUUID(),
           text: text || "图片待办",
@@ -94,51 +179,67 @@ function App() {
           attachments,
         },
       ],
-    }));
+    })));
   }
 
   function toggleTodo(todoId: string) {
     setState((current) => {
       const now = Date.now();
-      return {
-        ...current,
-        todos: current.todos.map((todo) =>
+      return updateActivePage(current, (page) => ({
+        ...page,
+        todos: page.todos.map((todo) =>
           todo.id === todoId
             ? {
                 ...todo,
                 completed: !todo.completed,
                 updatedAt: now,
-                sortIndex: now,
               }
             : todo,
         ),
-      };
+      }));
     });
   }
 
   function deleteTodo(todoId: string) {
-    setState((current) => ({
-      ...current,
-      todos: current.todos.filter((todo) => todo.id !== todoId),
-    }));
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.filter((todo) => todo.id !== todoId),
+    })));
+  }
+
+  function deleteAttachment(todoId: string, attachmentId: string) {
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              attachments: todo.attachments.filter((attachment) => attachment.id !== attachmentId),
+              updatedAt: Date.now(),
+            }
+          : todo,
+      ),
+    })));
+    setPreviewImage(null);
   }
 
   function updateTodoText(todoId: string, text: string) {
-    setState((current) => ({
-      ...current,
-      todos: current.todos.map((todo) =>
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.map((todo) =>
         todo.id === todoId ? { ...todo, text, updatedAt: Date.now() } : todo,
       ),
-    }));
+    })));
   }
 
   function moveTodoBefore(todoId: string, beforeTodoId: string | null) {
     setState((current) => {
-      const target = current.todos.find((todo) => todo.id === todoId);
+      const active = getActivePage(current);
+      const target = active.todos.find((todo) => todo.id === todoId);
       if (!target) return current;
-      const beforeTodo = beforeTodoId ? current.todos.find((todo) => todo.id === beforeTodoId) : null;
+      const beforeTodo = beforeTodoId ? active.todos.find((todo) => todo.id === beforeTodoId) : null;
       const nextPriorityId = beforeTodo?.priorityId ?? target.priorityId;
-      const ordered = sortTodos(current.todos.filter((todo) => todo.priorityId === nextPriorityId)).filter(
+      const ordered = sortTodos(active.todos.filter((todo) => todo.priorityId === nextPriorityId)).filter(
         (todo) => todo.id !== todoId,
       );
 
@@ -149,9 +250,9 @@ function App() {
       const now = Date.now();
       const reordered = new Map(ordered.map((todo, index) => [todo.id, index]));
 
-      return {
-        ...current,
-        todos: current.todos.map((todo) => {
+      return updateActivePage(current, (page) => ({
+        ...page,
+        todos: page.todos.map((todo) => {
           if (todo.id === target.id) {
             return {
               ...todo,
@@ -164,16 +265,17 @@ function App() {
             ? { ...todo, sortIndex: reordered.get(todo.id)!, updatedAt: now }
             : todo;
         }),
-      };
+      }));
     });
   }
 
   function moveTodoToGroupEnd(todoId: string, priorityId: string) {
     setState((current) => {
-      const target = current.todos.find((todo) => todo.id === todoId);
+      const active = getActivePage(current);
+      const target = active.todos.find((todo) => todo.id === todoId);
       if (!target) return current;
 
-      const ordered = sortTodos(current.todos.filter((todo) => todo.priorityId === priorityId)).filter(
+      const ordered = sortTodos(active.todos.filter((todo) => todo.priorityId === priorityId)).filter(
         (todo) => todo.id !== todoId,
       );
       ordered.push({ ...target, priorityId });
@@ -181,9 +283,9 @@ function App() {
       const now = Date.now();
       const reordered = new Map(ordered.map((todo, index) => [todo.id, index]));
 
-      return {
-        ...current,
-        todos: current.todos.map((todo) => {
+      return updateActivePage(current, (page) => ({
+        ...page,
+        todos: page.todos.map((todo) => {
           if (todo.id === target.id) {
             return {
               ...todo,
@@ -196,7 +298,161 @@ function App() {
             ? { ...todo, sortIndex: reordered.get(todo.id)!, updatedAt: now }
             : todo;
         }),
+      }));
+    });
+  }
+
+  function addPage() {
+    const id = crypto.randomUUID();
+    const fallbackTemplateId = activePage?.templateId || state.templates[0]?.id || "matrix";
+    setState((current) => ({
+      ...current,
+      activePageId: id,
+      pages: [...current.pages, createEmptyPage(id, fallbackTemplateId)],
+    }));
+  }
+
+  function closePage(pageId: string) {
+    deletePages([pageId]);
+  }
+
+  function requestClosePage(pageId: string) {
+    const page = state.pages.find((item) => item.id === pageId);
+    if (!page || state.pages.length <= 1) return;
+    setConfirmDialog({
+      title: "删除页签",
+      message: `确定删除“${page.title || DEFAULT_PAGE_TITLE}”吗？该页签中的事项也会被删除。`,
+      confirmLabel: "删除",
+      onConfirm: () => closePage(pageId),
+    });
+  }
+
+  function deletePages(pageIds: string[]) {
+    const deleteIds = new Set(pageIds);
+    setState((current) => {
+      if (deleteIds.size === 0) return current;
+
+      const nextPages = current.pages.filter((page) => !deleteIds.has(page.id));
+      if (!nextPages.length) {
+        const id = crypto.randomUUID();
+        return {
+          ...current,
+          activePageId: id,
+          pages: [createEmptyPage(id, current.pages[0]?.templateId || current.templates[0]?.id || "matrix")],
+        };
+      }
+
+      const nextActivePageId = deleteIds.has(current.activePageId)
+        ? nextPages[Math.min(current.pages.findIndex((page) => page.id === current.activePageId), nextPages.length - 1)]
+            ?.id ?? nextPages[0].id
+        : current.activePageId;
+
+      return {
+        ...current,
+        pages: nextPages,
+        activePageId: nextActivePageId,
       };
+    });
+  }
+
+  function updatePageTitle(pageId: string, title: string) {
+    setState((current) => ({
+      ...current,
+      pages: current.pages.map((page) =>
+        page.id === pageId ? { ...page, title } : page,
+      ),
+    }));
+  }
+
+  function updatePageColor(pageId: string, color: string) {
+    setState((current) => ({
+      ...current,
+      pages: current.pages.map((page) => (page.id === pageId ? { ...page, color } : page)),
+    }));
+  }
+
+  function reorderPages(pageId: string, beforePageId: string | null) {
+    if (beforePageId && pageId === beforePageId) return;
+    setState((current) => {
+      const target = current.pages.find((page) => page.id === pageId);
+      if (!target) return current;
+
+      const ordered = current.pages.filter((page) => page.id !== pageId);
+      const beforeIndex = beforePageId ? ordered.findIndex((page) => page.id === beforePageId) : -1;
+      ordered.splice(beforeIndex >= 0 ? beforeIndex : ordered.length, 0, target);
+
+      return {
+        ...current,
+        pages: ordered,
+      };
+    });
+  }
+
+  function exportState(scope: "all" | "active") {
+    const exportedState =
+      scope === "all"
+        ? state
+        : {
+            ...state,
+            pages: [activePage],
+            activePageId: activePage.id,
+          };
+    const blob = new Blob([JSON.stringify(exportedState, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = scope === "all" ? `edge-todos-backup-${timestamp}.json` : `edge-todos-page-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function importState(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!isBackupLike(parsed)) {
+          throw new Error("Invalid backup");
+        }
+        const imported = normalizeState(parsed);
+        setConfirmDialog({
+          title: "导入数据",
+          message: "导入会替换当前所有页签、模板和事项。确认继续？",
+          confirmLabel: "导入",
+          onConfirm: () => setState(imported),
+        });
+      } catch {
+        setConfirmDialog({
+          title: "导入失败",
+          message: "文件不是有效的待办备份数据。",
+          confirmLabel: "知道了",
+          onConfirm: () => {},
+        });
+      }
+    };
+    reader.onerror = () => {
+      setConfirmDialog({
+        title: "导入失败",
+        message: "无法读取这个备份文件，请确认文件仍然存在且可访问。",
+        confirmLabel: "知道了",
+        onConfirm: () => {},
+      });
+    };
+    reader.readAsText(file);
+  }
+
+  function movePreview(offset: -1 | 1) {
+    if (!previewContext) return;
+    const attachments = previewContext.todo.attachments;
+    const nextIndex = (previewContext.attachmentIndex + offset + attachments.length) % attachments.length;
+    const nextAttachment = attachments[nextIndex];
+    if (!nextAttachment) return;
+    setPreviewImage({
+      todoId: previewContext.todo.id,
+      attachmentId: nextAttachment.id,
     });
   }
 
@@ -211,6 +467,7 @@ function App() {
   }
 
   async function handleReveal() {
+    window.clearTimeout(autoHideTimerRef.current);
     const edge = state.windowPrefs.edge;
     if (!edge) return;
     await setWindowHidden(edge, false);
@@ -220,19 +477,41 @@ function App() {
     }));
   }
 
+  function handleMouseLeave() {
+    if (!hasTauriWindow || !state.windowPrefs.edge) return;
+    autoHideTimerRef.current = window.setTimeout(() => {
+      handleHide();
+    }, AUTO_HIDE_DELAY_MS);
+  }
+
   return (
-    <main className="app-shell" onMouseEnter={handleReveal}>
+    <main
+      className="app-shell"
+      style={{ backgroundColor: activePage.color }}
+      onMouseEnter={handleReveal}
+      onMouseLeave={handleMouseLeave}
+    >
       <header className="titlebar" data-tauri-drag-region>
-        <div className="brand" data-tauri-drag-region>
-          <LayoutGrid size={18} />
-          <span data-tauri-drag-region>Edge Todos</span>
-        </div>
+        <PageTabs
+          pages={state.pages}
+          activePageId={state.activePageId}
+          canClose={state.pages.length > 1}
+          onSelect={(pageId) => setState((current) => ({ ...current, activePageId: pageId }))}
+          onAdd={addPage}
+          onClose={requestClosePage}
+          onTitleChange={updatePageTitle}
+          onColorChange={updatePageColor}
+          onReorder={reorderPages}
+        />
         <div className="title-actions">
           {hasTauriWindow && state.windowPrefs.edge && (
             <button className="icon-button" onClick={handleHide} title="贴边隐藏">
               {state.windowPrefs.hidden ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
             </button>
           )}
+          <button className="icon-button" onClick={() => setPageManagerOpen(true)} title="页签管理">
+            <List size={18} />
+          </button>
           <button className="icon-button" onClick={() => setSettingsOpen(true)} title="设置">
             <Settings size={18} />
           </button>
@@ -244,11 +523,11 @@ function App() {
           <PriorityGroup
             key={priority.id}
             priority={priority}
-            todos={sortTodos(state.todos.filter((todo) => todo.priorityId === priority.id))}
+            todos={sortTodos(activePage.todos.filter((todo) => todo.priorityId === priority.id))}
             onToggle={toggleTodo}
             onDelete={deleteTodo}
             onTextChange={updateTodoText}
-            onPreview={setPreviewImage}
+            onPreview={(todoId, attachmentId) => setPreviewImage({ todoId, attachmentId })}
             onAdd={addTodo}
             onMoveBefore={moveTodoBefore}
             onMoveToGroupEnd={moveTodoToGroupEnd}
@@ -258,25 +537,97 @@ function App() {
         ))}
       </section>
 
-      {settingsOpen && (
-        <SettingsPanel
-          state={state}
-          activeTemplate={activeTemplate}
-          onClose={() => setSettingsOpen(false)}
-          onChange={setState}
+      {pageManagerOpen && (
+        <PageManagerPanel
+          pages={state.pages}
+          activePageId={state.activePageId}
+          onClose={() => setPageManagerOpen(false)}
+          onSelect={(pageId) => setState((current) => ({ ...current, activePageId: pageId }))}
+          onTitleChange={updatePageTitle}
+          onColorChange={updatePageColor}
+          onDelete={closePage}
+          onDeleteMany={deletePages}
+          onReorder={reorderPages}
         />
       )}
 
-      {previewImage && (
+      {settingsOpen && (
+        <SettingsPanel
+          state={state}
+          activePage={activePage}
+          onClose={() => setSettingsOpen(false)}
+          onSave={saveTemplateSettings}
+          onApply={applyTemplateSettings}
+          onExportAll={() => exportState("all")}
+          onExportActive={() => exportState("active")}
+          onImport={() => importInputRef.current?.click()}
+        />
+      )}
+
+      {previewContext && (
         <div className="preview-backdrop" onClick={() => setPreviewImage(null)}>
           <div className="preview-panel" onClick={(event) => event.stopPropagation()}>
-            <button className="icon-button preview-close" onClick={() => setPreviewImage(null)} title="关闭">
-              <X size={18} />
-            </button>
-            <img src={previewImage.dataUrl} alt={previewImage.name} />
+            <div className="preview-toolbar">
+              <span>{previewContext.attachment.name}</span>
+              {previewContext.todo.attachments.length > 1 && (
+                <div className="preview-nav">
+                  <button className="icon-button" onClick={() => movePreview(-1)} title="上一张">
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span>
+                    {previewContext.attachmentIndex + 1}/{previewContext.todo.attachments.length}
+                  </span>
+                  <button className="icon-button" onClick={() => movePreview(1)} title="下一张">
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
+              <button
+                className="preview-delete-button"
+                onClick={() =>
+                  setConfirmDialog({
+                    title: "删除图片",
+                    message: "确定从这个事项中删除当前图片吗？",
+                    confirmLabel: "删除",
+                    onConfirm: () => deleteAttachment(previewContext.todo.id, previewContext.attachment.id),
+                  })
+                }
+              >
+                <Trash2 size={15} />
+                删除
+              </button>
+              <button className="icon-button preview-close" onClick={() => setPreviewImage(null)} title="关闭">
+                <X size={18} />
+              </button>
+            </div>
+            <img src={previewContext.attachment.dataUrl} alt={previewContext.attachment.name} />
           </div>
         </div>
       )}
+
+      {confirmDialog && (
+        <ConfirmDialog
+          dialog={confirmDialog}
+          onCancel={() => setConfirmDialog(null)}
+          onConfirm={() => {
+            const action = confirmDialog.onConfirm;
+            setConfirmDialog(null);
+            action();
+          }}
+        />
+      )}
+
+      <input
+        ref={importInputRef}
+        className="hidden-input"
+        type="file"
+        accept="application/json,.json"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) importState(file);
+          event.currentTarget.value = "";
+        }}
+      />
     </main>
   );
 }
@@ -299,7 +650,7 @@ function PriorityGroup({
   onToggle: (todoId: string) => void;
   onDelete: (todoId: string) => void;
   onTextChange: (todoId: string, text: string) => void;
-  onPreview: (image: ImageAttachment) => void;
+  onPreview: (todoId: string, attachmentId: string) => void;
   onAdd: (priorityId: string, text: string, attachments?: ImageAttachment[]) => void;
   onMoveBefore: (todoId: string, beforeTodoId: string | null) => void;
   onMoveToGroupEnd: (todoId: string, priorityId: string) => void;
@@ -426,7 +777,7 @@ function PriorityGroup({
               onClick={() => onToggle(todo.id)}
               title={todo.completed ? "标记为未完成" : "标记为完成"}
             >
-              {todo.completed && <Check size={15} />}
+              {todo.completed && <Check size={14} />}
             </button>
             <div className="todo-content">
               <TodoText text={todo.text} onChange={(text) => onTextChange(todo.id, text)} />
@@ -434,10 +785,15 @@ function PriorityGroup({
             {todo.attachments.length > 0 && (
               <div className="thumb-strip">
                 {todo.attachments.slice(0, 3).map((attachment) => (
-                  <button className="thumb" key={attachment.id} onClick={() => onPreview(attachment)}>
+                  <button className="thumb" key={attachment.id} onClick={() => onPreview(todo.id, attachment.id)}>
                     <img src={attachment.dataUrl} alt={attachment.name} />
                   </button>
                 ))}
+                {todo.attachments.length > 3 && (
+                  <button className="thumb thumb-more" onClick={() => onPreview(todo.id, todo.attachments[3].id)}>
+                    +{todo.attachments.length - 3}
+                  </button>
+                )}
               </div>
             )}
             <div className="todo-actions">
@@ -448,6 +804,460 @@ function PriorityGroup({
           </article>
         ))}
         {todos.length === 0 && <div className="empty-group">暂无事项</div>}
+      </div>
+    </div>
+  );
+}
+
+function PageTabs({
+  pages,
+  activePageId,
+  canClose,
+  onSelect,
+  onAdd,
+  onClose,
+  onTitleChange,
+  onColorChange,
+  onReorder,
+}: {
+  pages: TodoPage[];
+  activePageId: string;
+  canClose: boolean;
+  onSelect: (pageId: string) => void;
+  onAdd: () => void;
+  onClose: (pageId: string) => void;
+  onTitleChange: (pageId: string, title: string) => void;
+  onColorChange: (pageId: string, color: string) => void;
+  onReorder: (pageId: string, beforePageId: string | null) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const activeTab = scrollRef.current?.querySelector<HTMLElement>(".page-tab.is-active");
+    activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activePageId, pages.length]);
+
+  function handleWheel(event: React.WheelEvent<HTMLElement>) {
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) return;
+    event.preventDefault();
+    scrollContainer.scrollLeft += delta;
+  }
+
+  return (
+    <nav className="page-tabs" data-tauri-drag-region aria-label="页签" onWheel={handleWheel}>
+      <div className="tab-scroll" ref={scrollRef}>
+        {pages.map((page) => (
+          <PageTab
+            key={page.id}
+            page={page}
+            active={page.id === activePageId}
+            canClose={canClose}
+            onSelect={onSelect}
+            onClose={onClose}
+            onTitleChange={onTitleChange}
+            onColorChange={onColorChange}
+            draggingPageId={draggingPageId}
+            onDraggingPageChange={setDraggingPageId}
+            onReorder={onReorder}
+          />
+        ))}
+        <div
+          className="tab-drop-end"
+          onDragOver={(event) => {
+            if (!draggingPageId) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const draggedId = draggingPageId || event.dataTransfer.getData("text/plain");
+            if (draggedId) onReorder(draggedId, null);
+            setDraggingPageId(null);
+          }}
+        />
+      </div>
+      <button className="tab-add-button" onClick={onAdd} title="新建页签">
+        <Plus size={16} />
+      </button>
+    </nav>
+  );
+}
+
+function PageTab({
+  page,
+  active,
+  canClose,
+  onSelect,
+  onClose,
+  onTitleChange,
+  onColorChange,
+  draggingPageId,
+  onDraggingPageChange,
+  onReorder,
+}: {
+  page: TodoPage;
+  active: boolean;
+  canClose: boolean;
+  onSelect: (pageId: string) => void;
+  onClose: (pageId: string) => void;
+  onTitleChange: (pageId: string, title: string) => void;
+  onColorChange: (pageId: string, color: string) => void;
+  draggingPageId: string | null;
+  onDraggingPageChange: (pageId: string | null) => void;
+  onReorder: (pageId: string, beforePageId: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(page.title);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setDraftTitle(page.title);
+  }, [page.title]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  function saveTitle() {
+    onTitleChange(page.id, draftTitle);
+    setEditing(false);
+  }
+
+  return (
+    <div
+      className={`page-tab ${active ? "is-active" : ""} ${draggingPageId === page.id ? "is-dragging" : ""}`}
+      style={{ backgroundColor: page.color }}
+      onClick={() => onSelect(page.id)}
+      draggable={!editing}
+      onDragStart={(event) => {
+        if (editing) return;
+        onDraggingPageChange(page.id);
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", page.id);
+      }}
+      onDragEnd={() => onDraggingPageChange(null)}
+      onDragOver={(event) => {
+        const draggedId = draggingPageId || event.dataTransfer.getData("text/plain");
+        if (!draggedId || draggedId === page.id) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const draggedId = draggingPageId || event.dataTransfer.getData("text/plain");
+        if (draggedId && draggedId !== page.id) onReorder(draggedId, page.id);
+        onDraggingPageChange(null);
+      }}
+    >
+      <ColorPicker page={page} onColorChange={onColorChange} />
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="tab-title-input"
+          value={draftTitle}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onBlur={saveTitle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") saveTitle();
+            if (event.key === "Escape") {
+              setDraftTitle(page.title);
+              setEditing(false);
+            }
+          }}
+          aria-label="页签标题"
+        />
+      ) : (
+        <button className="tab-title" onDoubleClick={() => setEditing(true)} title="双击重命名">
+          {active ? page.title : truncateTabTitle(page.title)}
+        </button>
+      )}
+      {canClose && (
+        <button
+          className="tab-close-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose(page.id);
+          }}
+          title="关闭页签"
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function truncateTabTitle(title: string) {
+  return Array.from(title).slice(0, 4).join("");
+}
+
+function ColorPicker({ page, onColorChange }: { page: TodoPage; onColorChange: (pageId: string, color: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+
+    function closeMenu() {
+      setOpen(false);
+    }
+
+    window.addEventListener("click", closeMenu);
+    return () => window.removeEventListener("click", closeMenu);
+  }, [open]);
+
+  return (
+    <div className="tab-color-picker" onClick={(event) => event.stopPropagation()}>
+      <button
+        className="tab-color-button"
+        style={{ backgroundColor: page.color }}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setMenuPosition({ top: rect.bottom + 6, left: rect.left });
+          setOpen((current) => !current);
+        }}
+        title="选择页签颜色"
+      />
+      {open && (
+        <div className="color-menu" style={{ top: menuPosition.top, left: menuPosition.left }}>
+          {PAGE_COLORS.map((color) => (
+            <button
+              key={color}
+              className={`color-swatch ${color === page.color ? "is-selected" : ""}`}
+              style={{ backgroundColor: color }}
+              onClick={() => {
+                onColorChange(page.id, color);
+                setOpen(false);
+              }}
+              title="设置页签颜色"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PageManagerPanel({
+  pages,
+  activePageId,
+  onClose,
+  onSelect,
+  onTitleChange,
+  onColorChange,
+  onDelete,
+  onDeleteMany,
+  onReorder,
+}: {
+  pages: TodoPage[];
+  activePageId: string;
+  onClose: () => void;
+  onSelect: (pageId: string) => void;
+  onTitleChange: (pageId: string, title: string) => void;
+  onColorChange: (pageId: string, color: string) => void;
+  onDelete: (pageId: string) => void;
+  onDeleteMany: (pageIds: string[]) => void;
+  onReorder: (pageId: string, beforePageId: string | null) => void;
+}) {
+  const [confirmPage, setConfirmPage] = useState<TodoPage | null>(null);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
+  const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
+  const selectedCount = selectedPageIds.length;
+  const canDeleteSelected = selectedCount > 0;
+  const allSelected = selectedCount === pages.length;
+
+  function togglePageSelection(pageId: string, selected: boolean) {
+    setSelectedPageIds((current) =>
+      selected ? [...new Set([...current, pageId])] : current.filter((id) => id !== pageId),
+    );
+  }
+
+  function toggleAllSelection(selected: boolean) {
+    setSelectedPageIds(selected ? pages.map((page) => page.id) : []);
+  }
+
+  return (
+    <div className="settings-backdrop">
+      <aside className="page-manager-panel">
+        <header>
+          <h2>页签管理</h2>
+          <button className="icon-button" onClick={onClose} title="关闭">
+            <X size={18} />
+          </button>
+        </header>
+        <div className="page-manager-toolbar">
+          <label className="manager-select-all">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={(event) => toggleAllSelection(event.target.checked)}
+            />
+            <span>全选</span>
+          </label>
+          <button
+            className="bulk-delete-button"
+            disabled={!canDeleteSelected}
+            onClick={() => setConfirmBulk(true)}
+            title="批量删除"
+          >
+            <Trash2 size={16} />
+            删除所选
+          </button>
+        </div>
+        <div className="page-manager-list">
+          {pages.map((page) => (
+            <div
+              className={`page-manager-row ${page.id === activePageId ? "is-active" : ""} ${
+                draggingPageId === page.id ? "is-dragging" : ""
+              }`}
+              key={page.id}
+              draggable
+              onDragStart={(event) => {
+                setDraggingPageId(page.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", page.id);
+              }}
+              onDragEnd={() => setDraggingPageId(null)}
+              onDragOver={(event) => {
+                const draggedId = draggingPageId || event.dataTransfer.getData("text/plain");
+                if (!draggedId || draggedId === page.id) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const draggedId = draggingPageId || event.dataTransfer.getData("text/plain");
+                if (draggedId && draggedId !== page.id) onReorder(draggedId, page.id);
+                setDraggingPageId(null);
+              }}
+            >
+              <input
+                className="manager-row-checkbox"
+                type="checkbox"
+                checked={selectedPageIds.includes(page.id)}
+                onChange={(event) => togglePageSelection(page.id, event.target.checked)}
+                onClick={(event) => event.stopPropagation()}
+                aria-label="选择页签"
+              />
+              <button
+                className="manager-page-select"
+                style={{ backgroundColor: page.color }}
+                onClick={() => onSelect(page.id)}
+                title="切换到此页签"
+              />
+              <input
+                value={page.title}
+                onChange={(event) => onTitleChange(page.id, event.target.value)}
+                onFocus={() => onSelect(page.id)}
+                aria-label="页签标题"
+              />
+              <ColorPicker page={page} onColorChange={onColorChange} />
+              <button
+                className="manager-delete-button"
+                disabled={pages.length <= 1}
+                onClick={() => setConfirmPage(page)}
+                title={pages.length <= 1 ? "至少保留一个页签" : "删除页签"}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          <div
+            className="page-manager-drop-end"
+            onDragOver={(event) => {
+              if (!draggingPageId) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const draggedId = draggingPageId || event.dataTransfer.getData("text/plain");
+              if (draggedId) onReorder(draggedId, null);
+              setDraggingPageId(null);
+            }}
+          />
+        </div>
+      </aside>
+      {confirmPage && (
+        <div className="confirm-backdrop" onClick={() => setConfirmPage(null)}>
+          <div className="confirm-dialog" onClick={(event) => event.stopPropagation()}>
+            <h3>删除页签</h3>
+            <p>确定删除“{confirmPage.title}”吗？该页签中的事项也会被删除。</p>
+            <div className="confirm-actions">
+              <button onClick={() => setConfirmPage(null)}>取消</button>
+              <button
+                className="danger-button"
+                onClick={() => {
+                  onDelete(confirmPage.id);
+                  setSelectedPageIds((current) => current.filter((id) => id !== confirmPage.id));
+                  setConfirmPage(null);
+                }}
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmBulk && (
+        <div className="confirm-backdrop" onClick={() => setConfirmBulk(false)}>
+          <div className="confirm-dialog" onClick={(event) => event.stopPropagation()}>
+            <h3>批量删除页签</h3>
+            <p>
+              确定删除选中的 {selectedCount} 个页签吗？这些页签中的事项也会被删除。
+              {selectedCount >= pages.length ? " 删除全部后会自动创建一个空的待办事项页签。" : ""}
+            </p>
+            <div className="confirm-actions">
+              <button onClick={() => setConfirmBulk(false)}>取消</button>
+              <button
+                className="danger-button"
+                onClick={() => {
+                  onDeleteMany(selectedPageIds);
+                  setSelectedPageIds([]);
+                  setConfirmBulk(false);
+                }}
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  dialog,
+  onCancel,
+  onConfirm,
+}: {
+  dialog: NonNullable<ConfirmDialogState>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isAcknowledgeOnly = dialog.confirmLabel === "知道了";
+
+  return (
+    <div className="confirm-backdrop" onClick={onCancel}>
+      <div className="confirm-dialog" onClick={(event) => event.stopPropagation()}>
+        <h3>{dialog.title}</h3>
+        <p>{dialog.message}</p>
+        <div className="confirm-actions">
+          {!isAcknowledgeOnly && <button onClick={onCancel}>取消</button>}
+          <button className={isAcknowledgeOnly ? "" : "danger-button"} onClick={onConfirm}>
+            {dialog.confirmLabel ?? "确认"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -523,38 +1333,45 @@ function MarkdownLine({ text }: { text: string }) {
 
 function SettingsPanel({
   state,
-  activeTemplate,
+  activePage,
   onClose,
-  onChange,
+  onSave,
+  onApply,
+  onExportAll,
+  onExportActive,
+  onImport,
 }: {
   state: AppState;
-  activeTemplate: PriorityTemplate;
+  activePage: TodoPage;
   onClose: () => void;
-  onChange: React.Dispatch<React.SetStateAction<AppState>>;
+  onSave: (draft: TemplateSettingsDraft) => void;
+  onApply: (draft: TemplateSettingsDraft) => void;
+  onExportAll: () => void;
+  onExportActive: () => void;
+  onImport: () => void;
 }) {
+  const [draft, setDraft] = useState<TemplateSettingsDraft>(() => ({
+    templates: state.templates,
+    selectedTemplateId: activePage.templateId,
+  }));
   const [draggingPriorityId, setDraggingPriorityId] = useState<string | null>(null);
+  const draftActiveTemplate = useMemo(
+    () => draft.templates.find((template) => template.id === draft.selectedTemplateId) ?? draft.templates[0],
+    [draft.selectedTemplateId, draft.templates],
+  );
 
   function selectTemplate(templateId: string) {
-    const template = state.templates.find((item) => item.id === templateId);
-    const fallbackPriority = template?.priorities[0]?.id;
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
-      activeTemplateId: templateId,
-      todos: fallbackPriority
-        ? current.todos.map((todo) =>
-            template.priorities.some((priority) => priority.id === todo.priorityId)
-              ? todo
-              : { ...todo, priorityId: fallbackPriority, updatedAt: Date.now() },
-          )
-        : current.todos,
+      selectedTemplateId: templateId,
     }));
   }
 
   function addCustomTemplate() {
     const id = crypto.randomUUID();
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
-      activeTemplateId: id,
+      selectedTemplateId: id,
       templates: [
         ...current.templates,
         {
@@ -569,19 +1386,19 @@ function SettingsPanel({
   }
 
   function updateTemplateName(name: string) {
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
       templates: current.templates.map((template) =>
-        template.id === activeTemplate.id ? { ...template, name } : template,
+        template.id === draftActiveTemplate.id ? { ...template, name } : template,
       ),
     }));
   }
 
   function updatePriority(priorityId: string, patch: Partial<Priority>) {
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
       templates: current.templates.map((template) =>
-        template.id === activeTemplate.id
+        template.id === draftActiveTemplate.id
           ? {
               ...template,
               priorities: template.priorities.map((priority) =>
@@ -594,10 +1411,10 @@ function SettingsPanel({
   }
 
   function addPriority() {
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
       templates: current.templates.map((template) =>
-        template.id === activeTemplate.id
+        template.id === draftActiveTemplate.id
           ? {
               ...template,
               priorities: [
@@ -617,10 +1434,10 @@ function SettingsPanel({
   function movePriorityBefore(priorityId: string, beforePriorityId: string | null) {
     if (beforePriorityId && priorityId === beforePriorityId) return;
 
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
       templates: current.templates.map((template) => {
-        if (template.id !== activeTemplate.id) return template;
+        if (template.id !== draftActiveTemplate.id) return template;
 
         const target = template.priorities.find((priority) => priority.id === priorityId);
         if (!target) return template;
@@ -642,7 +1459,7 @@ function SettingsPanel({
   }
 
   function movePriorityByStep(priorityId: string, direction: -1 | 1) {
-    const ordered = [...activeTemplate.priorities].sort((a, b) => a.order - b.order);
+    const ordered = [...draftActiveTemplate.priorities].sort((a, b) => a.order - b.order);
     const currentIndex = ordered.findIndex((priority) => priority.id === priorityId);
     const swapWith = ordered[currentIndex + direction];
     if (!swapWith) return;
@@ -650,25 +1467,19 @@ function SettingsPanel({
   }
 
   function deletePriority(priorityId: string) {
-    if (activeTemplate.priorities.length <= 1) return;
-    const fallback = activeTemplate.priorities.find((priority) => priority.id !== priorityId);
-    onChange((current) => ({
+    if (draftActiveTemplate.priorities.length <= 1) return;
+    setDraft((current) => ({
       ...current,
       templates: current.templates.map((template) =>
-        template.id === activeTemplate.id
+        template.id === draftActiveTemplate.id
           ? { ...template, priorities: template.priorities.filter((priority) => priority.id !== priorityId) }
           : template,
       ),
-      todos: fallback
-        ? current.todos.map((todo) =>
-            todo.priorityId === priorityId ? { ...todo, priorityId: fallback.id, updatedAt: Date.now() } : todo,
-          )
-        : current.todos,
     }));
   }
 
   function resetBuiltIns() {
-    onChange((current) => ({
+    setDraft((current) => ({
       ...current,
       templates: [
         ...BUILT_IN_TEMPLATES,
@@ -689,9 +1500,9 @@ function SettingsPanel({
           </button>
         </header>
         <label className="field">
-          <span>当前模板</span>
-          <select value={state.activeTemplateId} onChange={(event) => selectTemplate(event.target.value)}>
-            {state.templates.map((template) => (
+          <span>模板</span>
+          <select value={draft.selectedTemplateId} onChange={(event) => selectTemplate(event.target.value)}>
+            {draft.templates.map((template) => (
               <option key={template.id} value={template.id}>
                 {template.name}
               </option>
@@ -700,12 +1511,31 @@ function SettingsPanel({
         </label>
         <label className="field">
           <span>模板名称</span>
-          <input value={activeTemplate.name} onChange={(event) => updateTemplateName(event.target.value)} />
+          <input value={draftActiveTemplate.name} onChange={(event) => updateTemplateName(event.target.value)} />
         </label>
         <div className="settings-actions">
           <button onClick={addCustomTemplate}>新建模板</button>
           <button onClick={resetBuiltIns}>恢复内置模板</button>
         </div>
+        <section className="data-section">
+          <div className="editor-title">
+            <span>数据</span>
+          </div>
+          <div className="data-actions">
+            <button type="button" onClick={onExportAll}>
+              <Save size={15} />
+              导出全部
+            </button>
+            <button type="button" onClick={onExportActive}>
+              <Save size={15} />
+              导出当前页
+            </button>
+            <button type="button" onClick={onImport}>
+              <Import size={15} />
+              导入
+            </button>
+          </div>
+        </section>
         <div className="priority-editor">
           <div className="editor-title">
             <span>优先级</span>
@@ -714,7 +1544,7 @@ function SettingsPanel({
               添加
             </button>
           </div>
-          {[...activeTemplate.priorities]
+          {[...draftActiveTemplate.priorities]
             .sort((a, b) => a.order - b.order)
             .map((priority) => (
               <div
@@ -757,13 +1587,58 @@ function SettingsPanel({
               </div>
             ))}
         </div>
+        <div className="settings-footer">
+          <button type="button" onClick={onClose}>
+            取消
+          </button>
+          <button type="button" onClick={() => onSave(draft)}>
+            保存模板
+          </button>
+          <button className="primary-button" type="button" onClick={() => onApply(draft)}>
+            应用模板
+          </button>
+        </div>
       </aside>
     </div>
   );
 }
 
+function getFirstPriority(template: PriorityTemplate) {
+  return [...template.priorities].sort((a, b) => a.order - b.order)[0];
+}
+
+function createEmptyPage(id: string, templateId: string): TodoPage {
+  return {
+    id,
+    title: DEFAULT_PAGE_TITLE,
+    color: DEFAULT_PAGE_COLOR,
+    templateId,
+    todos: [],
+  };
+}
+
+function getActivePage(state: AppState) {
+  return state.pages.find((page) => page.id === state.activePageId) ?? state.pages[0];
+}
+
+function updateActivePage(state: AppState, update: (page: TodoPage) => TodoPage): AppState {
+  const active = getActivePage(state);
+  return {
+    ...state,
+    pages: state.pages.map((page) => (page.id === active.id ? update(page) : page)),
+  };
+}
+
 function sortTodos(todos: Todo[]) {
   return [...todos].sort((a, b) => a.sortIndex - b.sortIndex);
+}
+
+function isBackupLike(value: unknown) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      ("pages" in value || "todos" in value || "templates" in value || "schemaVersion" in value),
+  );
 }
 
 export default App;
