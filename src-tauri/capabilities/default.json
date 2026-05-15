@@ -9,6 +9,12 @@
     "core:window:allow-set-position",
     "core:window:allow-set-size",
     "core:window:allow-outer-size",
-    "core:window:allow-outer-position"
+    "core:window:allow-outer-position",
+    "dialog:default",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file"
   ]
 }

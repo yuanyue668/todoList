@@ -7,7 +7,7 @@ type WebviewWindow = {
   outerPosition(): Promise<{ x: number; y: number }>;
 };
 
-const isTauri = "__TAURI_INTERNALS__" in window;
+export const isTauri = "__TAURI_INTERNALS__" in window;
 const STRIP_SIZE = 8;
 const EDGE_THRESHOLD = 28;
 

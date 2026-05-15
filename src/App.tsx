@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { detectDockedEdge, getCurrentTauriWindow, setWindowHidden } from "./tauriWindow";
+import { detectDockedEdge, getCurrentTauriWindow, isTauri, setWindowHidden } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
 import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
 
@@ -434,35 +434,77 @@ function App() {
     });
   }
 
-  function exportState(scope: "all" | "active") {
+  async function exportState(scope: "all" | "active") {
     const exportedState =
       scope === "all"
         ? state
-        : {
-            ...state,
-            pages: [activePage],
-            activePageId: activePage.id,
-          };
-    const blob = new Blob([JSON.stringify(exportedState, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+        : { ...state, pages: [activePage], activePageId: activePage.id };
     const timestamp = new Date().toISOString().slice(0, 10);
-    link.href = url;
-    link.download = scope === "all" ? `edge-todos-backup-${timestamp}.json` : `edge-todos-page-${timestamp}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    const filename =
+      scope === "all"
+        ? `edge-todos-backup-${timestamp}.json`
+        : `edge-todos-page-${timestamp}.json`;
+    const content = JSON.stringify(exportedState, null, 2);
+
+    if (isTauri) {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+      const path = await save({
+        defaultPath: filename,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (path) await writeTextFile(path, content);
+    } else {
+      const blob = new Blob([content], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
   }
 
-  function importState(file: File) {
+  async function importState(file?: File) {
+    if (isTauri) {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const { readTextFile } = await import("@tauri-apps/plugin-fs");
+      const path = await open({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        multiple: false,
+      });
+      if (!path || typeof path !== "string") return;
+      try {
+        const text = await readTextFile(path);
+        const parsed = JSON.parse(text);
+        if (!isBackupLike(parsed)) throw new Error("Invalid backup");
+        const imported = normalizeState(parsed);
+        setConfirmDialog({
+          title: "导入数据",
+          message: "导入会替换当前所有页签、模板和事项。确认继续？",
+          confirmLabel: "导入",
+          onConfirm: () => setState(imported),
+        });
+      } catch {
+        setConfirmDialog({
+          title: "导入失败",
+          message: "文件不是有效的待办备份数据。",
+          confirmLabel: "知道了",
+          onConfirm: () => {},
+        });
+      }
+      return;
+    }
+
+    // Browser fallback
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result));
-        if (!isBackupLike(parsed)) {
-          throw new Error("Invalid backup");
-        }
+        if (!isBackupLike(parsed)) throw new Error("Invalid backup");
         const imported = normalizeState(parsed);
         setConfirmDialog({
           title: "导入数据",
@@ -613,7 +655,7 @@ function App() {
           onApply={applyTemplateSettings}
           onExportAll={() => exportState("all")}
           onExportActive={() => exportState("active")}
-          onImport={() => importInputRef.current?.click()}
+          onImport={() => isTauri ? importState() : importInputRef.current?.click()}
         />
       )}
 
