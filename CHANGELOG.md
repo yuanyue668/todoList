@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-05-16
+
+### Fixed
+- Windows: release builds no longer open a terminal window on startup
+- Windows: window can now be dragged by clicking any non-interactive area of the title bar
+
 ## [1.0.0] — 2026-05-15
 
 ### Added
