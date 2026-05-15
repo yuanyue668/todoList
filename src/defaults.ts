@@ -2,6 +2,8 @@ import type { AppState, PriorityTemplate } from "./types";
 
 const now = Date.now();
 
+export const DEFAULT_PAGE_COLOR = "#f8fafc";
+
 export const BUILT_IN_TEMPLATES: PriorityTemplate[] = [
   {
     id: "matrix",
@@ -25,42 +27,51 @@ export const BUILT_IN_TEMPLATES: PriorityTemplate[] = [
 ];
 
 export const DEFAULT_STATE: AppState = {
+  schemaVersion: 2,
   templates: BUILT_IN_TEMPLATES,
-  activeTemplateId: "matrix",
+  activePageId: "default-page",
   windowPrefs: {
     edge: null,
     hidden: false,
   },
-  todos: [
+  pages: [
     {
-      id: "sample-1",
-      text: "任务一（已完成）",
-      priorityId: "matrix-urgent-important",
-      completed: true,
-      createdAt: now - 3000,
-      updatedAt: now - 1000,
-      sortIndex: 0,
-      attachments: [],
-    },
-    {
-      id: "sample-2",
-      text: "任务二（未完成） :sparkles:",
-      priorityId: "matrix-urgent-important",
-      completed: false,
-      createdAt: now - 2000,
-      updatedAt: now - 2000,
-      sortIndex: 1,
-      attachments: [],
-    },
-    {
-      id: "sample-3",
-      text: "任务三（未完成）",
-      priorityId: "matrix-important-not-urgent",
-      completed: false,
-      createdAt: now - 1000,
-      updatedAt: now - 1000,
-      sortIndex: 2,
-      attachments: [],
+      id: "default-page",
+      title: "待办事项",
+      color: DEFAULT_PAGE_COLOR,
+      templateId: "matrix",
+      todos: [
+        {
+          id: "sample-1",
+          text: "任务一（已完成）",
+          priorityId: "matrix-urgent-important",
+          completed: true,
+          createdAt: now - 3000,
+          updatedAt: now - 1000,
+          sortIndex: 0,
+          attachments: [],
+        },
+        {
+          id: "sample-2",
+          text: "任务二（未完成） :sparkles:",
+          priorityId: "matrix-urgent-important",
+          completed: false,
+          createdAt: now - 2000,
+          updatedAt: now - 2000,
+          sortIndex: 1,
+          attachments: [],
+        },
+        {
+          id: "sample-3",
+          text: "任务三（未完成）",
+          priorityId: "matrix-important-not-urgent",
+          completed: false,
+          createdAt: now - 1000,
+          updatedAt: now - 1000,
+          sortIndex: 2,
+          attachments: [],
+        },
+      ],
     },
   ],
 };

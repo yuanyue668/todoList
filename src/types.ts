@@ -31,14 +31,23 @@ export type Todo = {
   attachments: ImageAttachment[];
 };
 
+export type TodoPage = {
+  id: string;
+  title: string;
+  color: string;
+  templateId: string;
+  todos: Todo[];
+};
+
 export type WindowPrefs = {
   edge: EdgeSide;
   hidden: boolean;
 };
 
 export type AppState = {
+  schemaVersion: number;
   templates: PriorityTemplate[];
-  activeTemplateId: string;
-  todos: Todo[];
+  pages: TodoPage[];
+  activePageId: string;
   windowPrefs: WindowPrefs;
 };
