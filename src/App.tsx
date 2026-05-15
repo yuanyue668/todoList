@@ -57,6 +57,7 @@ function App() {
   const autoHideTimerRef = useRef<number | undefined>(undefined);
   const [hasTauriWindow, setHasTauriWindow] = useState(false);
   const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
+  const [dragOverTodoId, setDragOverTodoId] = useState<string | null>(null);
 
   const activePage = useMemo(
     () => state.pages.find((page) => page.id === state.activePageId) ?? state.pages[0],
@@ -533,6 +534,8 @@ function App() {
             onMoveToGroupEnd={moveTodoToGroupEnd}
             draggingTodoId={draggingTodoId}
             onDraggingTodoChange={setDraggingTodoId}
+            dragOverTodoId={dragOverTodoId}
+            onDragOverTodoChange={setDragOverTodoId}
           />
         ))}
       </section>
@@ -644,6 +647,8 @@ function PriorityGroup({
   onMoveToGroupEnd,
   draggingTodoId,
   onDraggingTodoChange,
+  dragOverTodoId,
+  onDragOverTodoChange,
 }: {
   priority: Priority;
   todos: Todo[];
@@ -656,6 +661,8 @@ function PriorityGroup({
   onMoveToGroupEnd: (todoId: string, priorityId: string) => void;
   draggingTodoId: string | null;
   onDraggingTodoChange: (todoId: string | null) => void;
+  dragOverTodoId: string | null;
+  onDragOverTodoChange: (todoId: string | null) => void;
 }) {
   const [draftText, setDraftText] = useState(EMPTY_TEXT);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -735,6 +742,7 @@ function PriorityGroup({
           if (!draggedId) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
+          onDragOverTodoChange(null);
         }}
         onDrop={(event) => {
           event.preventDefault();
@@ -742,13 +750,14 @@ function PriorityGroup({
           if (!draggedId) return;
           onMoveToGroupEnd(draggedId, priority.id);
           onDraggingTodoChange(null);
+          onDragOverTodoChange(null);
         }}
       >
         {todos.map((todo) => (
           <article
             className={`todo-item ${todo.completed ? "is-completed" : ""} ${
               draggingTodoId === todo.id ? "is-dragging" : ""
-            }`}
+            } ${dragOverTodoId === todo.id ? "is-drop-target" : ""}`}
             key={todo.id}
             draggable
             onDragStart={(event) => {
@@ -756,12 +765,17 @@ function PriorityGroup({
               event.dataTransfer.effectAllowed = "move";
               event.dataTransfer.setData("text/plain", todo.id);
             }}
-            onDragEnd={() => onDraggingTodoChange(null)}
+            onDragEnd={() => {
+              onDraggingTodoChange(null);
+              onDragOverTodoChange(null);
+            }}
             onDragOver={(event) => {
-              const draggedId = event.dataTransfer.getData("text/plain") || draggingTodoId;
-              if (!draggedId || draggedId === todo.id) return;
+              const draggedId = (event.dataTransfer?.getData("text/plain") ?? "") || draggingTodoId;
+              if (draggedId === todo.id) return;
               event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
+              event.stopPropagation();
+              if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+              onDragOverTodoChange(todo.id);
             }}
             onDrop={(event) => {
               event.preventDefault();
@@ -770,6 +784,7 @@ function PriorityGroup({
               if (!draggedId || draggedId === todo.id) return;
               onMoveBefore(draggedId, todo.id);
               onDraggingTodoChange(null);
+              onDragOverTodoChange(null);
             }}
           >
             <button
