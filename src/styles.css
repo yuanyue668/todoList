@@ -992,6 +992,10 @@ button {
   z-index: 1;
 }
 
+.group-items.is-collapsed {
+  display: none;
+}
+
 @media (max-width: 430px) {
   .todo-item {
     grid-template-columns: 24px minmax(0, 1fr) 32px;

@@ -666,6 +666,7 @@ function PriorityGroup({
 }) {
   const [draftText, setDraftText] = useState(EMPTY_TEXT);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -704,8 +705,15 @@ function PriorityGroup({
         <button className="group-add-button" onClick={openComposer} title="在此分组添加事项">
           <Plus size={16} />
         </button>
+        <button
+          className="icon-button"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "展开分组" : "折叠分组"}
+        >
+          {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+        </button>
       </div>
-      {composerOpen && (
+      {!collapsed && composerOpen && (
         <div className="group-composer" onPaste={handlePaste}>
           <input
             ref={draftInputRef}
@@ -736,10 +744,15 @@ function PriorityGroup({
         </div>
       )}
       <div
-        className="group-items"
+        className={`group-items${collapsed ? " is-collapsed" : ""}`}
+        style={collapsed ? { display: "none" } : undefined}
         onDragOver={(event) => {
           const draggedId = event.dataTransfer.getData("text/plain") || draggingTodoId;
           if (!draggedId) return;
+          if (collapsed) {
+            setCollapsed(false);
+            return;
+          }
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
           onDragOverTodoChange(null);

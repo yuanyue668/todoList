@@ -195,3 +195,66 @@ describe("F1 — Drag Insertion Indicator", () => {
     expect(todoB).not.toHaveClass("is-drop-target");
   });
 });
+
+describe("F2 — Group Collapse/Expand", () => {
+  beforeEach(() => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        schemaVersion: 2,
+        templates: [
+          {
+            id: "matrix",
+            name: "四象限优先级",
+            priorities: [{ id: "p1", name: "🔥 高", order: 0 }],
+          },
+        ],
+        pages: [
+          {
+            id: "page-1",
+            title: "待办事项",
+            color: "#f8fafc",
+            templateId: "matrix",
+            todos: [
+              {
+                id: "todo-a",
+                text: "任务 A",
+                priorityId: "p1",
+                completed: false,
+                createdAt: 1,
+                updatedAt: 1,
+                sortIndex: 0,
+                attachments: [],
+              },
+            ],
+          },
+        ],
+        activePageId: "page-1",
+        windowPrefs: { edge: null, hidden: false },
+      })
+    );
+  });
+
+  afterEach(() => { localStorage.clear(); });
+
+  it("collapses group items when collapse button is clicked", () => {
+    render(<App />);
+    expect(screen.getByText("任务 A")).toBeInTheDocument();
+
+    const collapseBtn = screen.getByTitle("折叠分组");
+    fireEvent.click(collapseBtn);
+
+    expect(screen.queryByText("任务 A")).not.toBeVisible();
+  });
+
+  it("expands group again when expand button is clicked", () => {
+    render(<App />);
+    const collapseBtn = screen.getByTitle("折叠分组");
+    fireEvent.click(collapseBtn);
+
+    const expandBtn = screen.getByTitle("展开分组");
+    fireEvent.click(expandBtn);
+
+    expect(screen.getByText("任务 A")).toBeVisible();
+  });
+});
