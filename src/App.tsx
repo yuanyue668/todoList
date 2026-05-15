@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { detectDockedEdge, getCurrentTauriWindow, isTauri, setWindowHidden } from "./tauriWindow";
+import { detectDockedEdge, getCurrentTauriWindow, isTauri, setWindowHidden, startWindowDragging } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
 import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
 
@@ -572,6 +572,13 @@ function App() {
     }, AUTO_HIDE_DELAY_MS);
   }
 
+  async function handleTitlebarMouseDown(e: React.MouseEvent<HTMLElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, a, select, textarea, [draggable="true"]')) return;
+    await startWindowDragging();
+  }
+
   return (
     <main
       className="app-shell"
@@ -579,7 +586,7 @@ function App() {
       onMouseEnter={handleReveal}
       onMouseLeave={handleMouseLeave}
     >
-      <header className="titlebar" data-tauri-drag-region>
+      <header className="titlebar" data-tauri-drag-region onMouseDown={handleTitlebarMouseDown}>
         <PageTabs
           pages={state.pages}
           activePageId={state.activePageId}

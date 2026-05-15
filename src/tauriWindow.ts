@@ -11,6 +11,12 @@ export const isTauri = "__TAURI_INTERNALS__" in window;
 const STRIP_SIZE = 8;
 const EDGE_THRESHOLD = 28;
 
+export async function startWindowDragging(): Promise<void> {
+  if (!isTauri) return;
+  const mod = await import("@tauri-apps/api/window");
+  await mod.getCurrentWindow().startDragging();
+}
+
 export async function getCurrentTauriWindow(): Promise<WebviewWindow | null> {
   if (!isTauri) {
     return null;
