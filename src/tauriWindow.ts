@@ -1,42 +1,60 @@
 import type { EdgeSide } from "./types";
 
-type WebviewWindow = {
-  setPosition(position: { type: "Physical"; x: number; y: number }): Promise<void>;
-  setSize(size: { type: "Physical"; width: number; height: number }): Promise<void>;
-  outerSize(): Promise<{ width: number; height: number }>;
-  outerPosition(): Promise<{ x: number; y: number }>;
-};
-
 export const isTauri = "__TAURI_INTERNALS__" in window;
 const STRIP_SIZE = 8;
 const EDGE_THRESHOLD = 28;
 
-export async function startWindowDragging(): Promise<void> {
-  if (!isTauri) return;
-  const mod = await import("@tauri-apps/api/window");
-  await mod.getCurrentWindow().startDragging();
+// Pre-cache the window reference at module init so startDragging() has no import latency
+// on Windows/WebView2 the first dynamic import can be slow enough to miss the drag context
+let _cachedWindow: any = null;
+let _loadPromise: Promise<any> | null = null;
+
+function getWindow(): Promise<any> {
+  if (_cachedWindow) return Promise.resolve(_cachedWindow);
+  if (!_loadPromise) {
+    _loadPromise = import("@tauri-apps/api/window").then((mod) => {
+      _cachedWindow = mod.getCurrentWindow();
+      return _cachedWindow;
+    });
+  }
+  return _loadPromise;
 }
 
-export async function getCurrentTauriWindow(): Promise<WebviewWindow | null> {
-  if (!isTauri) {
-    return null;
-  }
+if (isTauri) {
+  getWindow(); // fire preload immediately
+}
 
+export async function startWindowDragging(): Promise<void> {
+  if (!isTauri) return;
+  const win = await getWindow();
+  await win.startDragging();
+}
+
+export async function closeWindow(): Promise<void> {
+  if (!isTauri) return;
+  const win = await getWindow();
+  await win.hide();
+}
+
+export async function setWindowAlwaysOnTop(value: boolean): Promise<void> {
+  if (!isTauri) return;
+  const win = await getWindow();
+  await win.setAlwaysOnTop(value);
+}
+
+export async function getCurrentTauriWindow(): Promise<any | null> {
+  if (!isTauri) return null;
   try {
-    const mod = await import("@tauri-apps/api/window");
-    return mod.getCurrentWindow() as unknown as WebviewWindow;
+    return await getWindow();
   } catch {
     return null;
   }
 }
 
 export async function detectDockedEdge(): Promise<EdgeSide> {
-  const appWindow = await getCurrentTauriWindow();
-  if (!appWindow) {
-    return null;
-  }
-
-  const [position, size] = await Promise.all([appWindow.outerPosition(), appWindow.outerSize()]);
+  if (!isTauri) return null;
+  const win = await getWindow();
+  const [position, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
   const screenWidth = window.screen.availWidth;
   const screenHeight = window.screen.availHeight;
 
@@ -48,12 +66,9 @@ export async function detectDockedEdge(): Promise<EdgeSide> {
 }
 
 export async function setWindowHidden(edge: EdgeSide, hidden: boolean) {
-  const appWindow = await getCurrentTauriWindow();
-  if (!appWindow || !edge) {
-    return;
-  }
-
-  const [position, size] = await Promise.all([appWindow.outerPosition(), appWindow.outerSize()]);
+  if (!isTauri || !edge) return;
+  const win = await getWindow();
+  const [position, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
   const screenWidth = window.screen.availWidth;
   const screenHeight = window.screen.availHeight;
 
@@ -71,7 +86,7 @@ export async function setWindowHidden(edge: EdgeSide, hidden: boolean) {
     bottom: { x: visiblePosition.x, y: screenHeight - STRIP_SIZE },
   }[edge];
 
-  await appWindow.setPosition({
+  await win.setPosition({
     type: "Physical",
     ...(hidden ? hiddenPosition : visiblePosition),
   });

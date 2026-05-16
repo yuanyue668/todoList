@@ -58,12 +58,64 @@ button {
 
 .titlebar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: stretch;
-  gap: 6px;
-  padding: 0 6px 0 0;
+  gap: 0;
+  padding: 0 4px 0 0;
   background: transparent;
   user-select: none;
+}
+
+.titlebar-drag-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 0 4px;
+  cursor: grab;
+  color: rgba(15, 23, 42, 0.22);
+}
+
+.titlebar-drag-zone:active {
+  cursor: grabbing;
+}
+
+.win-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 3px;
+  padding-left: 5px;
+  border-left: 1px solid var(--line-soft);
+  align-self: center;
+  height: 22px;
+}
+
+.win-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: #64748b;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.win-btn:hover {
+  background: rgba(226, 232, 240, 0.82);
+  color: #0f172a;
+}
+
+.win-btn.is-active {
+  color: var(--accent);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.win-btn-close:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger);
 }
 
 .page-tabs {
@@ -258,7 +310,10 @@ button {
 }
 
 .title-actions {
-  padding-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 2px 2px;
 }
 
 .icon-button {

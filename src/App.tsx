@@ -8,12 +8,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  GripHorizontal,
   ImagePlus,
   Import,
   Info,
   List,
   MoveDown,
   MoveUp,
+  Pin,
   Plus,
   Save,
   Settings,
@@ -22,7 +24,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { detectDockedEdge, getCurrentTauriWindow, isTauri, setWindowHidden, startWindowDragging } from "./tauriWindow";
+import { closeWindow, detectDockedEdge, getCurrentTauriWindow, isTauri, setWindowAlwaysOnTop, setWindowHidden, startWindowDragging } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
 import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
 
@@ -68,6 +70,7 @@ function App() {
   }, []);
 
   const [hasTauriWindow, setHasTauriWindow] = useState(false);
+  const [pinnedOnTop, setPinnedOnTop] = useState(true); // mirrors alwaysOnTop from tauri.conf.json
   const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
   const [dragOverTodoId, setDragOverTodoId] = useState<string | null>(null);
 
@@ -579,6 +582,16 @@ function App() {
     await startWindowDragging();
   }
 
+  async function handleClose() {
+    await closeWindow();
+  }
+
+  async function handleTogglePin() {
+    const next = !pinnedOnTop;
+    setPinnedOnTop(next);
+    await setWindowAlwaysOnTop(next);
+  }
+
   return (
     <main
       className="app-shell"
@@ -598,6 +611,10 @@ function App() {
           onColorChange={updatePageColor}
           onReorder={reorderPages}
         />
+        {/* Dedicated drag zone — always unobstructed by tabs/buttons, works on Windows/WebView2 */}
+        <div className="titlebar-drag-zone" data-tauri-drag-region>
+          <GripHorizontal size={13} />
+        </div>
         <div className="title-actions">
           {hasTauriWindow && state.windowPrefs.edge && (
             <button className="icon-button" onClick={handleHide} title="贴边隐藏">
@@ -613,6 +630,20 @@ function App() {
           <button className="icon-button" onClick={() => setSettingsOpen(true)} title="设置">
             <Settings size={18} />
           </button>
+          {hasTauriWindow && (
+            <div className="win-controls">
+              <button
+                className={`win-btn${pinnedOnTop ? " is-active" : ""}`}
+                onClick={handleTogglePin}
+                title={pinnedOnTop ? "取消置顶" : "置顶窗口"}
+              >
+                <Pin size={13} />
+              </button>
+              <button className="win-btn win-btn-close" onClick={handleClose} title="关闭">
+                <X size={13} />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
