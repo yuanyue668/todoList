@@ -55,13 +55,16 @@ export async function detectDockedEdge(): Promise<EdgeSide> {
   if (!isTauri) return null;
   const win = await getWindow();
   const [position, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
-  const screenWidth = window.screen.availWidth;
-  const screenHeight = window.screen.availHeight;
+  // outerPosition/outerSize return physical pixels; scale screen dimensions to match
+  const dpr = window.devicePixelRatio || 1;
+  const screenWidth = Math.round(window.screen.availWidth * dpr);
+  const screenHeight = Math.round(window.screen.availHeight * dpr);
+  const threshold = Math.round(EDGE_THRESHOLD * dpr);
 
-  if (position.x <= EDGE_THRESHOLD) return "left";
-  if (position.y <= EDGE_THRESHOLD) return "top";
-  if (position.x + size.width >= screenWidth - EDGE_THRESHOLD) return "right";
-  if (position.y + size.height >= screenHeight - EDGE_THRESHOLD) return "bottom";
+  if (position.x <= threshold) return "left";
+  if (position.y <= threshold) return "top";
+  if (position.x + size.width >= screenWidth - threshold) return "right";
+  if (position.y + size.height >= screenHeight - threshold) return "bottom";
   return null;
 }
 
@@ -69,8 +72,9 @@ export async function setWindowHidden(edge: EdgeSide, hidden: boolean) {
   if (!isTauri || !edge) return;
   const win = await getWindow();
   const [position, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
-  const screenWidth = window.screen.availWidth;
-  const screenHeight = window.screen.availHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const screenWidth = Math.round(window.screen.availWidth * dpr);
+  const screenHeight = Math.round(window.screen.availHeight * dpr);
 
   const visiblePosition = {
     left: { x: 0, y: clamp(position.y, 0, screenHeight - size.height) },
@@ -90,6 +94,12 @@ export async function setWindowHidden(edge: EdgeSide, hidden: boolean) {
     type: "Physical",
     ...(hidden ? hiddenPosition : visiblePosition),
   });
+}
+
+export async function onWindowMoved(callback: () => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const win = await getWindow();
+  return win.onMoved(callback);
 }
 
 function clamp(value: number, min: number, max: number) {

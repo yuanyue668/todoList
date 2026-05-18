@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { closeWindow, detectDockedEdge, getCurrentTauriWindow, isTauri, setWindowAlwaysOnTop, setWindowHidden, startWindowDragging } from "./tauriWindow";
+import { closeWindow, detectDockedEdge, getCurrentTauriWindow, isTauri, onWindowMoved, setWindowAlwaysOnTop, setWindowHidden, startWindowDragging } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
 import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
 
@@ -152,6 +152,8 @@ function App() {
   useEffect(() => {
     if (!hasTauriWindow) return;
     let timer: number | undefined;
+    let unlistenMoved: (() => void) | undefined;
+
     const detect = () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(async () => {
@@ -164,12 +166,17 @@ function App() {
         }
       }, 260);
     };
+
     window.addEventListener("mouseup", detect);
     window.addEventListener("resize", detect);
+    // onMoved catches moves where mouseup fires outside the WebView (e.g. releasing on OS taskbar)
+    onWindowMoved(detect).then((unlisten) => { unlistenMoved = unlisten; });
+
     return () => {
       window.removeEventListener("mouseup", detect);
       window.removeEventListener("resize", detect);
       window.clearTimeout(timer);
+      unlistenMoved?.();
     };
   }, [hasTauriWindow]);
 
@@ -579,6 +586,7 @@ function App() {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('button, input, a, select, textarea, [draggable="true"]')) return;
+    e.preventDefault(); // prevent text selection flash during window drag on Windows/WebView2
     await startWindowDragging();
   }
 
