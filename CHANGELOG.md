@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-05-27
+
+### Changed
+- Added AI handoff notes for running the release pipeline end to end.
+- Synced package lock metadata with the application version.
+
 ## [1.0.1] — 2026-05-16
 
 ### Fixed
