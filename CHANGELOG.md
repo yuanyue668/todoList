@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-05-28
+
+### Fixed
+- Windows: desktop installers now keep the app asset base at `/` during GitHub Actions release builds, preventing installed-app white screens caused by GitHub Pages paths.
+- Windows: hidden edge-docked windows now poll the visible reveal strip so hover reveal works after the window moves mostly offscreen.
+
+### Added
+- Added a Windows installed-app smoke script that verifies startup/version, real window drag, edge hide/reveal, and basic click/keyboard todo entry.
+
 ## [1.0.4] — 2026-05-27
 
 ### Changed

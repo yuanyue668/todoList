@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { closeWindow, detectDockedEdge, getCurrentTauriWindow, isTauri, onWindowMoved, setWindowAlwaysOnTop, setWindowHidden, startWindowDragging } from "./tauriWindow";
+import { closeWindow, detectDockedEdge, getCurrentTauriWindow, isCursorInRevealStrip, isTauri, onWindowMoved, setWindowAlwaysOnTop, setWindowHidden, startWindowDragging } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
 import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
 
@@ -212,6 +212,28 @@ function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activePriorities]);
+
+  useEffect(() => {
+    if (!hasTauriWindow || !state.windowPrefs.hidden || !state.windowPrefs.edge) return;
+    let cancelled = false;
+
+    async function revealIfCursorIsInStrip() {
+      try {
+        if (!state.windowPrefs.edge || !(await isCursorInRevealStrip(state.windowPrefs.edge))) return;
+        if (!cancelled) await handleReveal();
+      } catch {
+        // Mouse polling is a best-effort fallback for offscreen windows.
+      }
+    }
+
+    const interval = window.setInterval(revealIfCursorIsInStrip, 120);
+    revealIfCursorIsInStrip();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [hasTauriWindow, state.windowPrefs.hidden, state.windowPrefs.edge]);
 
   function addTodo(priorityId: string, textValue: string, attachments: ImageAttachment[] = []) {
     const text = textValue.trim();

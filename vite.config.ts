@@ -8,7 +8,7 @@ const { version } = require("./package.json") as { version: string };
 
 export default defineConfig({
   plugins: [react()],
-  base: process.env.GITHUB_ACTIONS ? "/todoList/" : "/",
+  base: process.env.VITE_BASE_PATH || "/",
   clearScreen: false,
   server: {
     port: 1420,

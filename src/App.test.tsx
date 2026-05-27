@@ -6,11 +6,13 @@ const mockSetWindowHidden = vi.fn().mockResolvedValue(undefined);
 const mockDetectDockedEdge = vi.fn().mockResolvedValue(null);
 const mockGetCurrentTauriWindow = vi.fn().mockResolvedValue(null);
 const mockOnWindowMoved = vi.fn().mockResolvedValue(() => {});
+const mockIsCursorInRevealStrip = vi.fn().mockResolvedValue(false);
 
 vi.mock("./tauriWindow", () => ({
   getCurrentTauriWindow: () => mockGetCurrentTauriWindow(),
   detectDockedEdge: () => mockDetectDockedEdge(),
   onWindowMoved: (callback: () => void) => mockOnWindowMoved(callback),
+  isCursorInRevealStrip: (edge: string) => mockIsCursorInRevealStrip(edge),
   setWindowHidden: (edge: string, hidden: boolean) =>
     mockSetWindowHidden(edge, hidden),
 }));
@@ -49,6 +51,8 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
       outerSize: vi.fn().mockResolvedValue({ width: 360, height: 640 }),
     });
     mockSetWindowHidden.mockClear();
+    mockIsCursorInRevealStrip.mockReset();
+    mockIsCursorInRevealStrip.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -114,6 +118,30 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
     });
 
     expect(mockSetWindowHidden).not.toHaveBeenCalled();
+  });
+
+  it("reveals a hidden docked window when the cursor enters the visible strip", async () => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        ...JSON.parse(DOCKED_STATE),
+        windowPrefs: { edge: "left", hidden: true },
+      })
+    );
+    mockIsCursorInRevealStrip.mockResolvedValue(true);
+
+    render(<App />);
+    await act(async () => {
+      await vi.runAllTicks();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(120);
+      await vi.runAllTicks();
+    });
+
+    expect(mockIsCursorInRevealStrip).toHaveBeenCalledWith("left");
+    expect(mockSetWindowHidden).toHaveBeenCalledWith("left", false);
   });
 });
 
