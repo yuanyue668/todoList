@@ -5,10 +5,12 @@ import App from "./App";
 const mockSetWindowHidden = vi.fn().mockResolvedValue(undefined);
 const mockDetectDockedEdge = vi.fn().mockResolvedValue(null);
 const mockGetCurrentTauriWindow = vi.fn().mockResolvedValue(null);
+const mockOnWindowMoved = vi.fn().mockResolvedValue(() => {});
 
 vi.mock("./tauriWindow", () => ({
   getCurrentTauriWindow: () => mockGetCurrentTauriWindow(),
   detectDockedEdge: () => mockDetectDockedEdge(),
+  onWindowMoved: (callback: () => void) => mockOnWindowMoved(callback),
   setWindowHidden: (edge: string, hidden: boolean) =>
     mockSetWindowHidden(edge, hidden),
 }));
