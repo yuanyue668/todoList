@@ -8,6 +8,16 @@ export type ImageAttachment = {
   createdAt: number;
 };
 
+export type TodoTextStyle = {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  color: string;
+  highlight: string;
+  link: string;
+};
+
 export type Priority = {
   id: string;
   name: string;
@@ -25,10 +35,12 @@ export type Todo = {
   text: string;
   priorityId: string;
   completed: boolean;
+  completedAt: number | null;
   createdAt: number;
   updatedAt: number;
   sortIndex: number;
   attachments: ImageAttachment[];
+  style: TodoTextStyle;
 };
 
 export type TodoPage = {

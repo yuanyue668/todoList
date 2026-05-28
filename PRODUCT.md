@@ -19,13 +19,16 @@ The primary workflow is grouped todo management. Users define priority groups, a
 - Todo text is the todo content. There is no separate title/body model.
 - Todo text supports Markdown emoji syntax through `remark-gemoji`, for example `:sparkles:`.
 - Double-click todo text to edit it inline. `Enter` or blur saves; `Esc` cancels.
+- Todo text supports per-item styling for bold, italic, underline, strikethrough, font color, highlight color, and an optional link.
 - Todos support image attachments through paste or file selection.
+- Existing todos can add more image attachments from the row action.
 - Images render as thumbnails on the right side of a todo. Clicking a thumbnail opens a larger preview with a toolbar.
 - If a todo has more than three images, the row shows a `+N` thumbnail entry so hidden attachments remain reachable.
 - The image preview toolbar supports deleting the current image after confirmation.
 - A todo checkbox toggles completion. Completed todos are visually muted and struck through.
+- Completing a todo records a completion timestamp. The timestamp is shown under the todo text and can be edited or cleared.
 - Toggling completion does not change the todo's manual sort order.
-- Todos can be dragged to any position, inside the same group or across groups.
+- Todos can be dragged from the row handle to any position, inside the same group or across groups.
 - Dropping on another todo inserts before that todo. Dropping on group empty space appends to the group.
 - Deleting a todo uses the trash button fixed on the far right of the todo row.
 - Page tabs can be selected like browser tabs, added with the plus button, deleted when more than one exists, renamed by double-clicking the title, and recolored from the swatch before the title.
@@ -62,7 +65,7 @@ The primary workflow is grouped todo management. Users define priority groups, a
 
 - Current persistence is browser/WebView `localStorage`.
 - Storage key: `edge-todos-state-v1`.
-- State shape is defined in `src/types.ts`. Current state stores `schemaVersion`, templates plus `pages`; each page owns its `templateId`, title, color, and todos.
+- State shape is defined in `src/types.ts`. Current state stores `schemaVersion`, templates plus `pages`; each page owns its `templateId`, title, color, and todos. Todos include completion timestamps and per-item text style metadata.
 - Load/save helpers are in `src/storage.ts`.
 - Loading normalizes older or partially corrupted local data by filling missing page, todo, attachment, template, sort, and window preference fields.
 - Image attachments are stored as compressed data URLs inside todo state.

@@ -1,8 +1,8 @@
-import { DEFAULT_PAGE_COLOR, DEFAULT_STATE } from "./defaults";
-import type { AppState, ImageAttachment, PriorityTemplate, Todo, TodoPage, WindowPrefs } from "./types";
+import { DEFAULT_PAGE_COLOR, DEFAULT_STATE, DEFAULT_TODO_STYLE } from "./defaults";
+import type { AppState, ImageAttachment, PriorityTemplate, Todo, TodoPage, TodoTextStyle, WindowPrefs } from "./types";
 
 const STORAGE_KEY = "edge-todos-state-v1";
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 type LegacyAppState = Partial<AppState> & {
   activeTemplateId?: string;
@@ -156,6 +156,14 @@ function normalizeTodo(todo: unknown, index: number): Todo {
         ? source.priorityId
         : DEFAULT_STATE.pages[0].todos[0]?.priorityId ?? DEFAULT_STATE.templates[0].priorities[0].id,
     completed: Boolean(source.completed),
+    completedAt:
+      typeof source.completedAt === "number"
+        ? source.completedAt
+        : source.completed
+          ? typeof source.updatedAt === "number"
+            ? source.updatedAt
+            : now
+          : null,
     createdAt: typeof source.createdAt === "number" ? source.createdAt : now,
     updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : now,
     sortIndex: typeof source.sortIndex === "number" ? source.sortIndex : index,
@@ -164,6 +172,21 @@ function normalizeTodo(todo: unknown, index: number): Todo {
           .map((attachment, attachmentIndex) => normalizeAttachment(attachment, attachmentIndex))
           .filter((attachment): attachment is ImageAttachment => Boolean(attachment))
       : [],
+    style: normalizeTodoStyle(source.style),
+  };
+}
+
+function normalizeTodoStyle(style: TodoTextStyle | undefined): TodoTextStyle {
+  const source = isObject(style) ? (style as Partial<TodoTextStyle>) : {};
+  return {
+    bold: Boolean(source.bold),
+    italic: Boolean(source.italic),
+    underline: Boolean(source.underline),
+    strike: Boolean(source.strike),
+    color: typeof source.color === "string" && source.color ? source.color : DEFAULT_TODO_STYLE.color,
+    highlight:
+      typeof source.highlight === "string" && source.highlight ? source.highlight : DEFAULT_TODO_STYLE.highlight,
+    link: typeof source.link === "string" && source.link ? source.link : DEFAULT_TODO_STYLE.link,
   };
 }
 

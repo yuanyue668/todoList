@@ -3,6 +3,11 @@ import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import App from "./App";
 
 const mockSetWindowHidden = vi.fn().mockResolvedValue(undefined);
+const mockSetWindowAlwaysOnTop = vi.fn().mockResolvedValue(undefined);
+const mockStartWindowDragging = vi.fn().mockResolvedValue(undefined);
+const mockGetWindowOuterSize = vi.fn().mockResolvedValue({ width: 360, height: 640 });
+const mockSetWindowOuterSize = vi.fn().mockResolvedValue(undefined);
+const mockCloseWindow = vi.fn().mockResolvedValue(undefined);
 const mockDetectDockedEdge = vi.fn().mockResolvedValue(null);
 const mockGetCurrentTauriWindow = vi.fn().mockResolvedValue(null);
 const mockOnWindowMoved = vi.fn().mockResolvedValue(() => {});
@@ -15,6 +20,12 @@ vi.mock("./tauriWindow", () => ({
   isCursorInRevealStrip: (edge: string) => mockIsCursorInRevealStrip(edge),
   setWindowHidden: (edge: string, hidden: boolean) =>
     mockSetWindowHidden(edge, hidden),
+  setWindowAlwaysOnTop: (value: boolean) => mockSetWindowAlwaysOnTop(value),
+  startWindowDragging: () => mockStartWindowDragging(),
+  getWindowOuterSize: () => mockGetWindowOuterSize(),
+  setWindowOuterSize: (size: { width: number; height: number }) => mockSetWindowOuterSize(size),
+  closeWindow: () => mockCloseWindow(),
+  isTauri: false,
 }));
 
 const DOCKED_STATE = JSON.stringify({
@@ -58,6 +69,7 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
   afterEach(() => {
     vi.useRealTimers();
     localStorage.clear();
+    vi.setSystemTime(vi.getRealSystemTime());
     mockGetCurrentTauriWindow.mockResolvedValue(null);
   });
 
@@ -67,6 +79,7 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
       await vi.runAllTicks();
     });
 
+    fireEvent.click(screen.getByTitle("取消固定显示"));
     const shell = screen.getByRole("main");
     fireEvent.mouseLeave(shell);
 
@@ -84,6 +97,7 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
     render(<App />);
     await act(async () => { await vi.runAllTicks(); });
 
+    fireEvent.click(screen.getByTitle("取消固定显示"));
     const shell = screen.getByRole("main");
     fireEvent.mouseLeave(shell);
 
@@ -109,6 +123,7 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
     render(<App />);
     await act(async () => { await vi.runAllTicks(); });
 
+    fireEvent.click(screen.getByTitle("取消固定显示"));
     const shell = screen.getByRole("main");
     fireEvent.mouseLeave(shell);
 
@@ -118,6 +133,20 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
     });
 
     expect(mockSetWindowHidden).not.toHaveBeenCalled();
+  });
+
+  it("keeps a pinned docked window visible on mouse leave", async () => {
+    render(<App />);
+    await act(async () => { await vi.runAllTicks(); });
+
+    fireEvent.mouseLeave(screen.getByRole("main"));
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+      await vi.runAllTicks();
+    });
+
+    expect(mockSetWindowHidden).not.toHaveBeenCalledWith("left", true);
   });
 
   it("reveals a hidden docked window when the cursor enters the visible strip", async () => {
@@ -142,6 +171,31 @@ describe("F0 — Mouse Leave Auto-Hide", () => {
 
     expect(mockIsCursorInRevealStrip).toHaveBeenCalledWith("left");
     expect(mockSetWindowHidden).toHaveBeenCalledWith("left", false);
+  });
+
+  it("restores the resized outer size when a titlebar drag reports a default-sized move", async () => {
+    let movedCallback: (() => void) | undefined;
+    const resizedSize = { width: 520, height: 720 };
+    mockGetWindowOuterSize
+      .mockResolvedValueOnce(resizedSize)
+      .mockResolvedValueOnce({ width: 360, height: 640 });
+    mockOnWindowMoved.mockImplementation((callback: () => void) => {
+      movedCallback = callback;
+      return Promise.resolve(() => {});
+    });
+
+    render(<App />);
+    await act(async () => { await vi.runAllTicks(); });
+
+    fireEvent.mouseDown(document.querySelector(".titlebar-drag-zone")!);
+    await act(async () => { await vi.runAllTicks(); });
+    await act(async () => {
+      movedCallback?.();
+      await vi.runAllTicks();
+    });
+
+    expect(mockStartWindowDragging).toHaveBeenCalled();
+    expect(mockSetWindowOuterSize).toHaveBeenCalledWith(resizedSize);
   });
 });
 
@@ -223,6 +277,26 @@ describe("F1 — Drag Insertion Indicator", () => {
 
     fireEvent.dragEnd(todoB);
     expect(todoB).not.toHaveClass("is-drop-target");
+  });
+
+  it("reorders todos when dragging by the handle", () => {
+    render(<App />);
+    const todoA = screen.getByText("任务 A").closest("article")!;
+    const todoB = screen.getByText("任务 B").closest("article")!;
+    const handleB = todoB.querySelector(".todo-drag-handle")!;
+
+    fireEvent.dragStart(handleB, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: "move" },
+    });
+    fireEvent.drop(todoA, {
+      dataTransfer: { getData: () => "todo-b" },
+    });
+
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    const sortedTexts = [...saved.pages[0].todos]
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+      .map((todo) => todo.text);
+    expect(sortedTexts).toEqual(["任务 B", "任务 A"]);
   });
 });
 
@@ -346,6 +420,128 @@ describe("F3 — Keyboard Shortcuts", () => {
 
     fireEvent.keyDown(window, { key: "2", ctrlKey: true });
     expect(screen.queryByPlaceholderText("添加到⭐ 中")).not.toBeInTheDocument();
+  });
+});
+
+describe("GitHub issues — todo controls", () => {
+  beforeEach(() => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        schemaVersion: 2,
+        templates: [
+          {
+            id: "matrix",
+            name: "四象限优先级",
+            priorities: [{ id: "p1", name: "🔥 高", order: 0 }],
+          },
+        ],
+        pages: [
+          {
+            id: "page-1",
+            title: "待办事项",
+            color: "#f8fafc",
+            templateId: "matrix",
+            todos: [
+              {
+                id: "todo-a",
+                text: "任务 A",
+                priorityId: "p1",
+                completed: false,
+                createdAt: 1,
+                updatedAt: 1,
+                sortIndex: 0,
+                attachments: [],
+              },
+            ],
+          },
+        ],
+        activePageId: "page-1",
+        windowPrefs: { edge: null, hidden: false },
+      })
+    );
+  });
+
+  afterEach(() => { localStorage.clear(); });
+
+  it("closes the group composer with the close button", () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle("在此分组添加事项"));
+    expect(screen.getByPlaceholderText("添加到🔥 高")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("关闭添加框"));
+
+    expect(screen.queryByPlaceholderText("添加到🔥 高")).not.toBeInTheDocument();
+  });
+
+  it("records completion time when a todo is completed", () => {
+    vi.setSystemTime(new Date("2026-05-28T10:20:00+08:00"));
+    render(<App />);
+    fireEvent.click(screen.getByTitle("标记为完成"));
+
+    expect(screen.getByText("完成于")).toBeInTheDocument();
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].completed).toBe(true);
+    expect(saved.pages[0].todos[0].completedAt).toBe(new Date("2026-05-28T10:20:00+08:00").getTime());
+  });
+
+  it("allows editing and clearing the completion time", () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle("标记为完成"));
+
+    fireEvent.change(screen.getByLabelText("完成时间"), { target: { value: "2026-05-28T09:30" } });
+    let saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].completed).toBe(true);
+    expect(saved.pages[0].todos[0].completedAt).toBe(new Date("2026-05-28T09:30").getTime());
+
+    fireEvent.click(screen.getByTitle("清除完成时间"));
+    saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].completed).toBe(false);
+    expect(saved.pages[0].todos[0].completedAt).toBeNull();
+    expect(screen.queryByText("完成于")).not.toBeInTheDocument();
+  });
+
+  it("applies a text style from the style toolbar", () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle("文字样式"));
+    fireEvent.click(screen.getByTitle("粗体"));
+
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].style.bold).toBe(true);
+  });
+
+  it("applies underline, strike, color, highlight, and link styles from the toolbar", () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle("文字样式"));
+    fireEvent.click(screen.getByTitle("下划线"));
+    fireEvent.click(screen.getByTitle("删除线"));
+    fireEvent.change(screen.getByTitle("字体颜色").querySelector("input")!, { target: { value: "#ff0000" } });
+    fireEvent.change(screen.getByTitle("文本高亮色").querySelector("input")!, { target: { value: "#00ff00" } });
+    fireEvent.change(screen.getByPlaceholderText("https://"), { target: { value: "example.com" } });
+    fireEvent.blur(screen.getByPlaceholderText("https://"));
+
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].style).toMatchObject({
+      underline: true,
+      strike: true,
+      color: "#ff0000",
+      highlight: "#00ff00",
+      link: "https://example.com",
+    });
+  });
+
+  it("adds an image to an existing todo from the row action", () => {
+    render(<App />);
+    const file = new File(["GIF89a"], "todo.gif", { type: "image/gif" });
+    const input = screen.getByTitle("给事项添加图片").parentElement!.querySelector("input")!;
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    return screen.findByAltText("todo.gif").then(() => {
+      const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+      expect(saved.pages[0].todos[0].attachments).toHaveLength(1);
+      expect(saved.pages[0].todos[0].attachments[0].name).toBe("todo.gif");
+    });
   });
 });
 

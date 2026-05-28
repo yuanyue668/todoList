@@ -4,6 +4,16 @@ const now = Date.now();
 
 export const DEFAULT_PAGE_COLOR = "#f8fafc";
 
+export const DEFAULT_TODO_STYLE = {
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  color: "",
+  highlight: "",
+  link: "",
+};
+
 export const BUILT_IN_TEMPLATES: PriorityTemplate[] = [
   {
     id: "matrix",
@@ -27,7 +37,7 @@ export const BUILT_IN_TEMPLATES: PriorityTemplate[] = [
 ];
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   templates: BUILT_IN_TEMPLATES,
   activePageId: "default-page",
   windowPrefs: {
@@ -46,30 +56,36 @@ export const DEFAULT_STATE: AppState = {
           text: "任务一（已完成）",
           priorityId: "matrix-urgent-important",
           completed: true,
+          completedAt: now - 1000,
           createdAt: now - 3000,
           updatedAt: now - 1000,
           sortIndex: 0,
           attachments: [],
+          style: DEFAULT_TODO_STYLE,
         },
         {
           id: "sample-2",
           text: "任务二（未完成） :sparkles:",
           priorityId: "matrix-urgent-important",
           completed: false,
+          completedAt: null,
           createdAt: now - 2000,
           updatedAt: now - 2000,
           sortIndex: 1,
           attachments: [],
+          style: DEFAULT_TODO_STYLE,
         },
         {
           id: "sample-3",
           text: "任务三（未完成）",
           priorityId: "matrix-important-not-urgent",
           completed: false,
+          completedAt: null,
           createdAt: now - 1000,
           updatedAt: now - 1000,
           sortIndex: 2,
           attachments: [],
+          style: DEFAULT_TODO_STYLE,
         },
       ],
     },

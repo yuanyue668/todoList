@@ -1,36 +1,45 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGemoji from "remark-gemoji";
 import remarkGfm from "remark-gfm";
 import {
+  Bold,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   GripHorizontal,
+  GripVertical,
   ImagePlus,
   Import,
   Info,
+  Italic,
+  Link,
   List,
   MoveDown,
   MoveUp,
+  Palette,
   Pin,
   Plus,
   Save,
   Settings,
+  Strikethrough,
   Trash2,
+  Underline,
   X,
 } from "lucide-react";
-import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR } from "./defaults";
+import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR, DEFAULT_TODO_STYLE } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { closeWindow, detectDockedEdge, getCurrentTauriWindow, isCursorInRevealStrip, isTauri, onWindowMoved, setWindowAlwaysOnTop, setWindowHidden, startWindowDragging } from "./tauriWindow";
+import { closeWindow, detectDockedEdge, getCurrentTauriWindow, getWindowOuterSize, isCursorInRevealStrip, isTauri, onWindowMoved, setWindowAlwaysOnTop, setWindowHidden, setWindowOuterSize, startWindowDragging } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
-import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage } from "./types";
+import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage, TodoTextStyle } from "./types";
 
 const EMPTY_TEXT = "";
 const DEFAULT_PAGE_TITLE = "待办事项";
 const PAGE_COLORS = ["#f8fafc", "#f1f5f9", "#eef2ff", "#f0f9ff", "#ecfeff", "#f0fdf4", "#f7fee7", "#fff7ed", "#fdf2f8"];
+const DEFAULT_TEXT_COLOR = "#172033";
+const DEFAULT_HIGHLIGHT_COLOR = "#fef08a";
 const AUTO_HIDE_DELAY_MS = 1500;
 
 type TemplateSettingsDraft = {
@@ -59,6 +68,7 @@ function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const autoHideTimerRef = useRef<number | undefined>(undefined);
+  const dragSizeLockRef = useRef<{ size: { width: number; height: number }; expiresAt: number } | null>(null);
   const groupOpenerRef = useRef<Map<string, () => void>>(new Map());
 
   const registerGroupOpener = useCallback((priorityId: string, fn: () => void) => {
@@ -70,7 +80,7 @@ function App() {
   }, []);
 
   const [hasTauriWindow, setHasTauriWindow] = useState(false);
-  const [pinnedOnTop, setPinnedOnTop] = useState(true); // mirrors alwaysOnTop from tauri.conf.json
+  const [pinnedOpen, setPinnedOpen] = useState(true);
   const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
   const [dragOverTodoId, setDragOverTodoId] = useState<string | null>(null);
 
@@ -170,7 +180,22 @@ function App() {
     window.addEventListener("mouseup", detect);
     window.addEventListener("resize", detect);
     // onMoved catches moves where mouseup fires outside the WebView (e.g. releasing on OS taskbar)
-    onWindowMoved(detect).then((unlisten) => { unlistenMoved = unlisten; });
+    onWindowMoved(() => {
+      const dragSizeLock = dragSizeLockRef.current;
+      if (dragSizeLock && Date.now() <= dragSizeLock.expiresAt) {
+        getWindowOuterSize().then((currentSize) => {
+          if (
+            currentSize &&
+            (currentSize.width !== dragSizeLock.size.width || currentSize.height !== dragSizeLock.size.height)
+          ) {
+            setWindowOuterSize(dragSizeLock.size).catch(() => {});
+          }
+        });
+      } else {
+        dragSizeLockRef.current = null;
+      }
+      detect();
+    }).then((unlisten) => { unlistenMoved = unlisten; });
 
     return () => {
       window.removeEventListener("mouseup", detect);
@@ -251,10 +276,12 @@ function App() {
           text: text || "图片待办",
           priorityId,
           completed: false,
+          completedAt: null,
           createdAt: now,
           updatedAt: now,
           sortIndex: now,
           attachments,
+          style: DEFAULT_TODO_STYLE,
         },
       ],
     })));
@@ -270,12 +297,29 @@ function App() {
             ? {
                 ...todo,
                 completed: !todo.completed,
+                completedAt: todo.completed ? null : now,
                 updatedAt: now,
               }
             : todo,
         ),
       }));
     });
+  }
+
+  function updateCompletedAt(todoId: string, completedAt: number | null) {
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              completed: completedAt !== null,
+              completedAt,
+              updatedAt: Date.now(),
+            }
+          : todo,
+      ),
+    })));
   }
 
   function deleteTodo(todoId: string) {
@@ -310,6 +354,31 @@ function App() {
     })));
   }
 
+  function updateTodoStyle(todoId: string, style: TodoTextStyle) {
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.map((todo) =>
+        todo.id === todoId ? { ...todo, style, updatedAt: Date.now() } : todo,
+      ),
+    })));
+  }
+
+  function addTodoAttachments(todoId: string, attachments: ImageAttachment[]) {
+    if (!attachments.length) return;
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              attachments: [...todo.attachments, ...attachments],
+              updatedAt: Date.now(),
+            }
+          : todo,
+      ),
+    })));
+  }
+
   function moveTodoBefore(todoId: string, beforeTodoId: string | null) {
     setState((current) => {
       const active = getActivePage(current);
@@ -317,9 +386,9 @@ function App() {
       if (!target) return current;
       const beforeTodo = beforeTodoId ? active.todos.find((todo) => todo.id === beforeTodoId) : null;
       const nextPriorityId = beforeTodo?.priorityId ?? target.priorityId;
-      const ordered = sortTodos(active.todos.filter((todo) => todo.priorityId === nextPriorityId)).filter(
-        (todo) => todo.id !== todoId,
-      );
+      const ordered = sortTodos(
+        active.todos.filter((todo) => todo.priorityId === nextPriorityId || todo.id === todoId),
+      ).filter((todo) => todo.id !== todoId);
 
       const beforeIndex = beforeTodoId ? ordered.findIndex((todo) => todo.id === beforeTodoId) : -1;
       const insertIndex = beforeIndex >= 0 ? beforeIndex : ordered.length;
@@ -353,9 +422,9 @@ function App() {
       const target = active.todos.find((todo) => todo.id === todoId);
       if (!target) return current;
 
-      const ordered = sortTodos(active.todos.filter((todo) => todo.priorityId === priorityId)).filter(
-        (todo) => todo.id !== todoId,
-      );
+      const ordered = sortTodos(
+        active.todos.filter((todo) => todo.priorityId === priorityId || todo.id === todoId),
+      ).filter((todo) => todo.id !== todoId);
       ordered.push({ ...target, priorityId });
 
       const now = Date.now();
@@ -598,7 +667,7 @@ function App() {
   }
 
   function handleMouseLeave() {
-    if (!hasTauriWindow || !state.windowPrefs.edge) return;
+    if (!hasTauriWindow || pinnedOpen || !state.windowPrefs.edge) return;
     autoHideTimerRef.current = window.setTimeout(() => {
       handleHide();
     }, AUTO_HIDE_DELAY_MS);
@@ -609,6 +678,8 @@ function App() {
     const target = e.target as HTMLElement;
     if (target.closest('button, input, a, select, textarea, [draggable="true"]')) return;
     e.preventDefault(); // prevent text selection flash during window drag on Windows/WebView2
+    const size = await getWindowOuterSize();
+    dragSizeLockRef.current = size ? { size, expiresAt: Date.now() + 1500 } : null;
     await startWindowDragging();
   }
 
@@ -617,9 +688,10 @@ function App() {
   }
 
   async function handleTogglePin() {
-    const next = !pinnedOnTop;
-    setPinnedOnTop(next);
+    const next = !pinnedOpen;
+    setPinnedOpen(next);
     await setWindowAlwaysOnTop(next);
+    if (next) await handleReveal();
   }
 
   return (
@@ -663,9 +735,9 @@ function App() {
           {hasTauriWindow && (
             <div className="win-controls">
               <button
-                className={`win-btn${pinnedOnTop ? " is-active" : ""}`}
+                className={`win-btn${pinnedOpen ? " is-active" : ""}`}
                 onClick={handleTogglePin}
-                title={pinnedOnTop ? "取消置顶" : "置顶窗口"}
+                title={pinnedOpen ? "取消固定显示" : "固定显示"}
               >
                 <Pin size={13} />
               </button>
@@ -686,6 +758,9 @@ function App() {
             onToggle={toggleTodo}
             onDelete={deleteTodo}
             onTextChange={updateTodoText}
+            onStyleChange={updateTodoStyle}
+            onCompletedAtChange={updateCompletedAt}
+            onAddAttachments={addTodoAttachments}
             onPreview={(todoId, attachmentId) => setPreviewImage({ todoId, attachmentId })}
             onAdd={addTodo}
             onMoveBefore={moveTodoBefore}
@@ -803,6 +878,9 @@ function PriorityGroup({
   onToggle,
   onDelete,
   onTextChange,
+  onStyleChange,
+  onCompletedAtChange,
+  onAddAttachments,
   onPreview,
   onAdd,
   onMoveBefore,
@@ -819,6 +897,9 @@ function PriorityGroup({
   onToggle: (todoId: string) => void;
   onDelete: (todoId: string) => void;
   onTextChange: (todoId: string, text: string) => void;
+  onStyleChange: (todoId: string, style: TodoTextStyle) => void;
+  onCompletedAtChange: (todoId: string, completedAt: number | null) => void;
+  onAddAttachments: (todoId: string, attachments: ImageAttachment[]) => void;
   onPreview: (todoId: string, attachmentId: string) => void;
   onAdd: (priorityId: string, text: string, attachments?: ImageAttachment[]) => void;
   onMoveBefore: (todoId: string, beforeTodoId: string | null) => void;
@@ -861,6 +942,13 @@ function PriorityGroup({
     submit(attachments);
   }
 
+  async function addAttachmentsToTodo(todoId: string, files: FileList | File[]) {
+    const imageFiles = Array.from(files).filter(isImageFile);
+    if (!imageFiles.length) return;
+    const attachments = await Promise.all(imageFiles.map(fileToAttachment));
+    onAddAttachments(todoId, attachments);
+  }
+
   async function handlePaste(event: React.ClipboardEvent) {
     const files = Array.from(event.clipboardData.files).filter(isImageFile);
     if (!files.length) return;
@@ -892,6 +980,10 @@ function PriorityGroup({
             onChange={(event) => setDraftText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") submit();
+              if (event.key === "Escape") {
+                setDraftText(EMPTY_TEXT);
+                setComposerOpen(false);
+              }
             }}
             placeholder={`添加到${priority.name}`}
           />
@@ -900,6 +992,16 @@ function PriorityGroup({
           </button>
           <button className="primary-button" onClick={() => submit()}>
             <Plus size={17} />
+          </button>
+          <button
+            className="icon-button composer-close-button"
+            onClick={() => {
+              setDraftText(EMPTY_TEXT);
+              setComposerOpen(false);
+            }}
+            title="关闭添加框"
+          >
+            <X size={17} />
           </button>
           <input
             ref={fileInputRef}
@@ -943,12 +1045,7 @@ function PriorityGroup({
               draggingTodoId === todo.id ? "is-dragging" : ""
             } ${dragOverTodoId === todo.id ? "is-drop-target" : ""}`}
             key={todo.id}
-            draggable
-            onDragStart={(event) => {
-              onDraggingTodoChange(todo.id);
-              event.dataTransfer.effectAllowed = "move";
-              event.dataTransfer.setData("text/plain", todo.id);
-            }}
+            draggable={false}
             onDragEnd={() => {
               onDraggingTodoChange(null);
               onDragOverTodoChange(null);
@@ -972,6 +1069,22 @@ function PriorityGroup({
             }}
           >
             <button
+              className="todo-drag-handle"
+              draggable
+              onDragStart={(event) => {
+                onDraggingTodoChange(todo.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", todo.id);
+              }}
+              onDragEnd={() => {
+                onDraggingTodoChange(null);
+                onDragOverTodoChange(null);
+              }}
+              title="拖拽排序"
+            >
+              <GripVertical size={14} />
+            </button>
+            <button
               className={`checkbox ${todo.completed ? "checked" : ""}`}
               onClick={() => onToggle(todo.id)}
               title={todo.completed ? "标记为未完成" : "标记为完成"}
@@ -979,7 +1092,19 @@ function PriorityGroup({
               {todo.completed && <Check size={14} />}
             </button>
             <div className="todo-content">
-              <TodoText text={todo.text} onChange={(text) => onTextChange(todo.id, text)} />
+              <TodoText
+                text={todo.text}
+                style={todo.style}
+                completed={todo.completed}
+                onChange={(text) => onTextChange(todo.id, text)}
+                onStyleChange={(style) => onStyleChange(todo.id, style)}
+              />
+              {todo.completed && (
+                <TodoCompletedAt
+                  value={todo.completedAt}
+                  onChange={(completedAt) => onCompletedAtChange(todo.id, completedAt)}
+                />
+              )}
             </div>
             {todo.attachments.length > 0 && (
               <div className="thumb-strip">
@@ -996,6 +1121,7 @@ function PriorityGroup({
               </div>
             )}
             <div className="todo-actions">
+              <TodoAttachmentButton onFiles={(files) => addAttachmentsToTodo(todo.id, files)} />
               <button className="delete-button" onClick={() => onDelete(todo.id)} title="删除">
                 <Trash2 size={16} />
               </button>
@@ -1462,14 +1588,83 @@ function ConfirmDialog({
   );
 }
 
-function TodoText({ text, onChange }: { text: string; onChange: (text: string) => void }) {
+function TodoAttachmentButton({ onFiles }: { onFiles: (files: FileList) => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <>
+      <button className="delete-button" onClick={() => inputRef.current?.click()} title="给事项添加图片">
+        <ImagePlus size={16} />
+      </button>
+      <input
+        ref={inputRef}
+        className="hidden-input"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(event) => {
+          if (event.currentTarget.files) onFiles(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
+    </>
+  );
+}
+
+function TodoCompletedAt({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (value: number | null) => void;
+}) {
+  const dateValue = value ? formatDateTimeLocal(value) : "";
+
+  return (
+    <div className="todo-completed-at">
+      <span>完成于</span>
+      <input
+        type="datetime-local"
+        value={dateValue}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.value;
+          onChange(nextValue ? new Date(nextValue).getTime() : null);
+        }}
+        aria-label="完成时间"
+      />
+      <button className="todo-time-clear" onClick={() => onChange(null)} title="清除完成时间">
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
+function TodoText({
+  text,
+  style,
+  completed,
+  onChange,
+  onStyleChange,
+}: {
+  text: string;
+  style: TodoTextStyle;
+  completed: boolean;
+  onChange: (text: string) => void;
+  onStyleChange: (style: TodoTextStyle) => void;
+}) {
   const [editing, setEditing] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
   const [draft, setDraft] = useState(text);
+  const [linkDraft, setLinkDraft] = useState(style.link);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setDraft(text);
   }, [text]);
+
+  useEffect(() => {
+    setLinkDraft(style.link);
+  }, [style.link]);
 
   useEffect(() => {
     if (editing) {
@@ -1483,6 +1678,10 @@ function TodoText({ text, onChange }: { text: string; onChange: (text: string) =
     onChange(nextText || text);
     setDraft(nextText || text);
     setEditing(false);
+  }
+
+  function patchStyle(patch: Partial<TodoTextStyle>) {
+    onStyleChange({ ...style, ...patch });
   }
 
   if (editing) {
@@ -1506,26 +1705,125 @@ function TodoText({ text, onChange }: { text: string; onChange: (text: string) =
   }
 
   return (
-    <button className="todo-text-button" onDoubleClick={() => setEditing(true)} title="双击编辑">
-      <MarkdownLine text={text} />
-    </button>
+    <div className="todo-text-wrap">
+      <button className="todo-text-button" onDoubleClick={() => setEditing(true)} title="双击编辑">
+        <MarkdownLine text={text} style={style} completed={completed} />
+      </button>
+      <button
+        className={`todo-style-toggle${styleOpen ? " is-active" : ""}`}
+        onClick={() => setStyleOpen((open) => !open)}
+        title="文字样式"
+      >
+        <Palette size={14} />
+      </button>
+      {styleOpen && (
+        <div className="todo-style-panel">
+          <button className={style.bold ? "is-active" : ""} onClick={() => patchStyle({ bold: !style.bold })} title="粗体">
+            <Bold size={14} />
+          </button>
+          <button className={style.italic ? "is-active" : ""} onClick={() => patchStyle({ italic: !style.italic })} title="斜体">
+            <Italic size={14} />
+          </button>
+          <button
+            className={style.underline ? "is-active" : ""}
+            onClick={() => patchStyle({ underline: !style.underline })}
+            title="下划线"
+          >
+            <Underline size={14} />
+          </button>
+          <button className={style.strike ? "is-active" : ""} onClick={() => patchStyle({ strike: !style.strike })} title="删除线">
+            <Strikethrough size={14} />
+          </button>
+          <label className="style-color-control" title="字体颜色">
+            <span style={{ backgroundColor: style.color || DEFAULT_TEXT_COLOR }} />
+            <input
+              type="color"
+              value={style.color || DEFAULT_TEXT_COLOR}
+              onChange={(event) => patchStyle({ color: event.currentTarget.value })}
+            />
+          </label>
+          <label className="style-color-control" title="文本高亮色">
+            <span style={{ backgroundColor: style.highlight || DEFAULT_HIGHLIGHT_COLOR }} />
+            <input
+              type="color"
+              value={style.highlight || DEFAULT_HIGHLIGHT_COLOR}
+              onChange={(event) => patchStyle({ highlight: event.currentTarget.value })}
+            />
+          </label>
+          <label className="style-link-control" title="超链接">
+            <Link size={13} />
+            <input
+              value={linkDraft}
+              onChange={(event) => setLinkDraft(event.currentTarget.value)}
+              onBlur={() => patchStyle({ link: normalizeLink(linkDraft) })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") patchStyle({ link: normalizeLink(linkDraft) });
+                if (event.key === "Escape") {
+                  setLinkDraft(style.link);
+                  setStyleOpen(false);
+                }
+              }}
+              placeholder="https://"
+            />
+          </label>
+          <button
+            onClick={() => {
+              setLinkDraft("");
+              onStyleChange(DEFAULT_TODO_STYLE);
+            }}
+            title="清除样式"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {style.link && (
+        <a className="todo-link" href={style.link} target="_blank" rel="noreferrer" title="打开超链接">
+          <Link size={13} />
+        </a>
+      )}
+    </div>
   );
 }
 
-function MarkdownLine({ text }: { text: string }) {
+function MarkdownLine({
+  text,
+  style,
+  completed,
+}: {
+  text: string;
+  style: TodoTextStyle;
+  completed: boolean;
+}) {
+  const lineStyle: CSSProperties = {
+    color: style.color || undefined,
+    backgroundColor: style.highlight || undefined,
+    fontWeight: style.bold ? 700 : undefined,
+    fontStyle: style.italic ? "italic" : undefined,
+    textDecoration: [
+      style.underline ? "underline" : "",
+      style.strike ? "line-through" : "",
+      completed ? "line-through" : "",
+    ].filter(Boolean).join(" ") || undefined,
+  };
+  const content = (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkGemoji]}
+      components={{
+        p: ({ children }) => <span>{children}</span>,
+        ul: ({ children }) => <span>{children}</span>,
+        li: ({ children }) => <span>{children}</span>,
+        input: ({ checked }) => <span className={`md-checkbox ${checked ? "checked" : ""}`} />,
+        a: ({ children }) => <span>{children}</span>,
+      }}
+    >
+      {`- [ ] ${text}`}
+    </ReactMarkdown>
+  );
+
   return (
-    <div className="markdown-line">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkGemoji]}
-        components={{
-          p: ({ children }) => <span>{children}</span>,
-          ul: ({ children }) => <span>{children}</span>,
-          li: ({ children }) => <span>{children}</span>,
-          input: ({ checked }) => <span className={`md-checkbox ${checked ? "checked" : ""}`} />,
-        }}
-      >
-        {`- [ ] ${text}`}
-      </ReactMarkdown>
+    <div className="markdown-line" style={lineStyle}>
+      {content}
     </div>
   );
 }
@@ -1830,6 +2128,19 @@ function updateActivePage(state: AppState, update: (page: TodoPage) => TodoPage)
 
 function sortTodos(todos: Todo[]) {
   return [...todos].sort((a, b) => a.sortIndex - b.sortIndex);
+}
+
+function formatDateTimeLocal(timestamp: number) {
+  const date = new Date(timestamp);
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function normalizeLink(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
 }
 
 function isBackupLike(value: unknown) {

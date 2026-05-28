@@ -50,6 +50,21 @@ export async function setWindowAlwaysOnTop(value: boolean): Promise<void> {
   await win.setAlwaysOnTop(value);
 }
 
+export async function getWindowOuterSize(): Promise<PhysicalSize | null> {
+  if (!isTauri) return null;
+  const win = await getWindow();
+  return win.outerSize();
+}
+
+export async function setWindowOuterSize(size: PhysicalSize): Promise<void> {
+  if (!isTauri) return;
+  const win = await getWindow();
+  await win.setSize({
+    type: "Physical",
+    ...size,
+  });
+}
+
 export async function getCurrentTauriWindow(): Promise<any | null> {
   if (!isTauri) return null;
   try {
