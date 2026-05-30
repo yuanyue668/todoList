@@ -9,4 +9,11 @@ describe("Tauri desktop configuration", () => {
     expect(rustMain).toContain("TrayIconBuilder::new()");
     expect(config.app).not.toHaveProperty("trayIcon");
   });
+
+  it("allows the custom titlebar close button to hide the main window", () => {
+    const capability = JSON.parse(readFileSync("src-tauri/capabilities/default.json", "utf8"));
+
+    expect(capability.windows).toContain("main");
+    expect(capability.permissions).toContain("core:window:allow-hide");
+  });
 });

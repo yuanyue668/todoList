@@ -13,4 +13,13 @@ describe("Windows installed-app smoke script", () => {
     expect(script).toContain("Available titled elements");
     expect(script).toContain("Wait-ForElementCenter '.win-controls .win-btn:not(.win-btn-close).is-active'");
   });
+
+  it("clicks the custom close button and verifies the installed window hides", () => {
+    const script = readFileSync("scripts/verify-windows-installed-app.ps1", "utf8");
+
+    expect(script).toContain("function Test-CloseButtonHide");
+    expect(script).toContain("Wait-ForElementCenter '.win-btn-close'");
+    expect(script).toContain("[Win32WindowProbe]::IsWindowVisible($Handle) -eq $false");
+    expect(script).toContain("Testing titlebar close button hide");
+  });
 });

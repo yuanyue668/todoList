@@ -638,6 +638,32 @@ function Enable-AutoHideForSmoke($Handle, [System.Collections.Generic.List[strin
   }
 }
 
+function Test-CloseButtonHide($Handle, [System.Collections.Generic.List[string]]$Failures) {
+  Write-Step "Testing titlebar close button hide"
+
+  try {
+    if (-not [Win32WindowProbe]::IsWindowVisible($Handle)) {
+      throw "Window is not visible before titlebar close button test."
+    }
+
+    $closeButton = Wait-ForElementCenter '.win-btn-close' "titlebar close button"
+    $windowRect = Get-Rect $Handle
+    $screenPoint = Convert-CssPointToScreen $windowRect $closeButton
+    [Win32WindowProbe]::SetForegroundWindow($Handle) | Out-Null
+    Start-Sleep -Milliseconds 150
+    Click-Point $screenPoint.X $screenPoint.Y
+
+    Wait-Until {
+      [Win32WindowProbe]::IsWindowVisible($Handle) -eq $false
+    } "window to hide after titlebar close button click" 6
+
+    Write-Step "Titlebar close button hid the window"
+  } catch {
+    $Failures.Add($_.Exception.Message)
+    Write-Step "FAIL: $($_.Exception.Message)"
+  }
+}
+
 function Cleanup {
   if ($script:cleanupDone) { return }
   $script:cleanupDone = $true
@@ -839,6 +865,8 @@ if ($hideSucceeded) {
   $failures.Add("Reveal check skipped because auto-hide did not succeed.")
   Write-Step "Skipping reveal check because auto-hide did not succeed"
 }
+
+Test-CloseButtonHide $handle $failures
 
 Cleanup
 
