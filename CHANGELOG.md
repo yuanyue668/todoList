@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-05-31
+
+### Added
+- Todo rows now support setting and clearing planned completion times before completion.
+
+### Fixed
+- Windows: the titlebar close button now hides the window to the tray by allowing the Tauri hide command.
+- Clearing a todo completion timestamp no longer clears the completed state.
+- Todo drag sorting now works with pointer/mouse drag gestures in addition to synthetic drag events.
+
 ## [1.0.6] - 2026-05-30
 
 ### Added
