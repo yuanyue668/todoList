@@ -949,6 +949,7 @@ function PriorityGroup({
   const [collapsed, setCollapsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftInputRef = useRef<HTMLInputElement | null>(null);
+  const pointerDragRef = useRef<{ todoId: string; pointerId: number } | null>(null);
 
   const openComposer = useCallback(() => {
     setComposerOpen(true);
@@ -987,6 +988,49 @@ function PriorityGroup({
     if (!files.length) return;
     event.preventDefault();
     await handleFiles(files);
+  }
+
+  function getPointerDropTarget(event: React.PointerEvent): { todoId: string | null; priorityId: string | null } {
+    const element = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+    const todoElement = element?.closest<HTMLElement>("[data-todo-id]");
+    if (todoElement?.dataset.todoId) {
+      return {
+        todoId: todoElement.dataset.todoId,
+        priorityId: todoElement.dataset.priorityId ?? null,
+      };
+    }
+
+    const groupElement = element?.closest<HTMLElement>("[data-priority-id]");
+    return {
+      todoId: null,
+      priorityId: groupElement?.dataset.priorityId ?? null,
+    };
+  }
+
+  function movePointerDragIndicator(event: React.PointerEvent) {
+    const drag = pointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const target = getPointerDropTarget(event);
+    onDragOverTodoChange(target.todoId && target.todoId !== drag.todoId ? target.todoId : null);
+  }
+
+  function finishPointerDrag(event: React.PointerEvent) {
+    const drag = pointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    event.preventDefault();
+    const target = getPointerDropTarget(event);
+    if (target.todoId && target.todoId !== drag.todoId) {
+      onMoveBefore(drag.todoId, target.todoId);
+    } else if (target.priorityId) {
+      onMoveToGroupEnd(drag.todoId, target.priorityId);
+    }
+
+    pointerDragRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    onDraggingTodoChange(null);
+    onDragOverTodoChange(null);
   }
 
   return (
@@ -1051,6 +1095,7 @@ function PriorityGroup({
       )}
       <div
         className={`group-items${collapsed ? " is-collapsed" : ""}`}
+        data-priority-id={priority.id}
         style={collapsed ? { display: "none" } : undefined}
         onDragOver={(event) => {
           const draggedId = event.dataTransfer.getData("text/plain") || draggingTodoId;
@@ -1078,6 +1123,8 @@ function PriorityGroup({
               draggingTodoId === todo.id ? "is-dragging" : ""
             } ${dragOverTodoId === todo.id ? "is-drop-target" : ""}`}
             key={todo.id}
+            data-todo-id={todo.id}
+            data-priority-id={todo.priorityId}
             draggable={false}
             onDragEnd={() => {
               onDraggingTodoChange(null);
@@ -1104,6 +1151,23 @@ function PriorityGroup({
             <button
               className="todo-drag-handle"
               draggable
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.stopPropagation();
+                pointerDragRef.current = { todoId: todo.id, pointerId: event.pointerId };
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+                onDraggingTodoChange(todo.id);
+              }}
+              onPointerMove={movePointerDragIndicator}
+              onPointerUp={finishPointerDrag}
+              onPointerCancel={(event) => {
+                if (pointerDragRef.current?.pointerId !== event.pointerId) return;
+                pointerDragRef.current = null;
+                event.currentTarget.releasePointerCapture?.(event.pointerId);
+                onDraggingTodoChange(null);
+                onDragOverTodoChange(null);
+              }}
               onDragStart={(event) => {
                 onDraggingTodoChange(todo.id);
                 event.dataTransfer.effectAllowed = "move";

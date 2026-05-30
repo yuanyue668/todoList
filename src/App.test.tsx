@@ -300,6 +300,34 @@ describe("F1 — Drag Insertion Indicator", () => {
       .map((todo) => todo.text);
     expect(sortedTexts).toEqual(["任务 B", "任务 A"]);
   });
+
+  it("reorders todos when pointer dragging the handle over another todo", () => {
+    render(<App />);
+    const todoA = screen.getByText("任务 A").closest("article")!;
+    const todoB = screen.getByText("任务 B").closest("article")!;
+    const handleB = todoB.querySelector(".todo-drag-handle")!;
+    const originalElementFromPoint = document.elementFromPoint;
+    const elementFromPoint = vi.fn(() => todoA);
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: elementFromPoint,
+    });
+
+    fireEvent.pointerDown(handleB, { pointerId: 1, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(handleB, { pointerId: 1, buttons: 1, clientX: 12, clientY: 20 });
+    fireEvent.pointerUp(handleB, { pointerId: 1, clientX: 12, clientY: 20 });
+
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: originalElementFromPoint,
+    });
+
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    const sortedTexts = [...saved.pages[0].todos]
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+      .map((todo) => todo.text);
+    expect(sortedTexts).toEqual(["任务 B", "任务 A"]);
+  });
 });
 
 describe("F2 — Group Collapse/Expand", () => {
