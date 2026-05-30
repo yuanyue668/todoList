@@ -531,6 +531,22 @@ describe("GitHub issues — todo controls", () => {
     expect(screen.getByText("完成于")).toBeInTheDocument();
   });
 
+  it("allows setting and clearing a planned time before completion", () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("计划时间"), { target: { value: "2026-05-29T12:15" } });
+    let saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].completed).toBe(false);
+    expect(saved.pages[0].todos[0].completedAt).toBeNull();
+    expect(saved.pages[0].todos[0].plannedAt).toBe(new Date("2026-05-29T12:15").getTime());
+    expect(screen.getByText("计划于")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("清除计划时间"));
+    saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].plannedAt).toBeNull();
+    expect(screen.getByText("计划于")).toBeInTheDocument();
+  });
+
   it("applies a text style from the style toolbar", () => {
     render(<App />);
     fireEvent.click(screen.getByTitle("文字样式"));

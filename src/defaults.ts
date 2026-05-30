@@ -37,7 +37,7 @@ export const BUILT_IN_TEMPLATES: PriorityTemplate[] = [
 ];
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   templates: BUILT_IN_TEMPLATES,
   activePageId: "default-page",
   windowPrefs: {
@@ -57,6 +57,7 @@ export const DEFAULT_STATE: AppState = {
           priorityId: "matrix-urgent-important",
           completed: true,
           completedAt: now - 1000,
+          plannedAt: null,
           createdAt: now - 3000,
           updatedAt: now - 1000,
           sortIndex: 0,
@@ -69,6 +70,7 @@ export const DEFAULT_STATE: AppState = {
           priorityId: "matrix-urgent-important",
           completed: false,
           completedAt: null,
+          plannedAt: null,
           createdAt: now - 2000,
           updatedAt: now - 2000,
           sortIndex: 1,
@@ -81,6 +83,7 @@ export const DEFAULT_STATE: AppState = {
           priorityId: "matrix-important-not-urgent",
           completed: false,
           completedAt: null,
+          plannedAt: null,
           createdAt: now - 1000,
           updatedAt: now - 1000,
           sortIndex: 2,

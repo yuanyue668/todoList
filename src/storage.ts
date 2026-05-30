@@ -2,7 +2,7 @@ import { DEFAULT_PAGE_COLOR, DEFAULT_STATE, DEFAULT_TODO_STYLE } from "./default
 import type { AppState, ImageAttachment, PriorityTemplate, Todo, TodoPage, TodoTextStyle, WindowPrefs } from "./types";
 
 const STORAGE_KEY = "edge-todos-state-v1";
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 type LegacyAppState = Partial<AppState> & {
   activeTemplateId?: string;
@@ -164,6 +164,7 @@ function normalizeTodo(todo: unknown, index: number): Todo {
             ? source.updatedAt
             : now
           : null,
+    plannedAt: typeof source.plannedAt === "number" ? source.plannedAt : null,
     createdAt: typeof source.createdAt === "number" ? source.createdAt : now,
     updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : now,
     sortIndex: typeof source.sortIndex === "number" ? source.sortIndex : index,

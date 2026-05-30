@@ -36,6 +36,7 @@ export type Todo = {
   priorityId: string;
   completed: boolean;
   completedAt: number | null;
+  plannedAt: number | null;
   createdAt: number;
   updatedAt: number;
   sortIndex: number;

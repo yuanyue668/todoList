@@ -305,6 +305,7 @@ function App() {
           priorityId,
           completed: false,
           completedAt: null,
+          plannedAt: null,
           createdAt: now,
           updatedAt: now,
           sortIndex: now,
@@ -342,6 +343,21 @@ function App() {
           ? {
               ...todo,
               completedAt,
+              updatedAt: Date.now(),
+            }
+          : todo,
+      ),
+    })));
+  }
+
+  function updatePlannedAt(todoId: string, plannedAt: number | null) {
+    setState((current) => updateActivePage(current, (page) => ({
+      ...page,
+      todos: page.todos.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              plannedAt,
               updatedAt: Date.now(),
             }
           : todo,
@@ -793,6 +809,7 @@ function App() {
             onTextChange={updateTodoText}
             onStyleChange={updateTodoStyle}
             onCompletedAtChange={updateCompletedAt}
+            onPlannedAtChange={updatePlannedAt}
             onAddAttachments={addTodoAttachments}
             onPreview={(todoId, attachmentId) => setPreviewImage({ todoId, attachmentId })}
             onAdd={addTodo}
@@ -913,6 +930,7 @@ function PriorityGroup({
   onTextChange,
   onStyleChange,
   onCompletedAtChange,
+  onPlannedAtChange,
   onAddAttachments,
   onPreview,
   onAdd,
@@ -932,6 +950,7 @@ function PriorityGroup({
   onTextChange: (todoId: string, text: string) => void;
   onStyleChange: (todoId: string, style: TodoTextStyle) => void;
   onCompletedAtChange: (todoId: string, completedAt: number | null) => void;
+  onPlannedAtChange: (todoId: string, plannedAt: number | null) => void;
   onAddAttachments: (todoId: string, attachments: ImageAttachment[]) => void;
   onPreview: (todoId: string, attachmentId: string) => void;
   onAdd: (priorityId: string, text: string, attachments?: ImageAttachment[]) => void;
@@ -1196,6 +1215,12 @@ function PriorityGroup({
                 onChange={(text) => onTextChange(todo.id, text)}
                 onStyleChange={(style) => onStyleChange(todo.id, style)}
               />
+              {(!todo.completed || todo.plannedAt !== null) && (
+                <TodoPlannedAt
+                  value={todo.plannedAt}
+                  onChange={(plannedAt) => onPlannedAtChange(todo.id, plannedAt)}
+                />
+              )}
               {todo.completed && (
                 <TodoCompletedAt
                   value={todo.completedAt}
@@ -1708,6 +1733,24 @@ function TodoAttachmentButton({ onFiles }: { onFiles: (files: FileList) => void 
   );
 }
 
+function TodoPlannedAt({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <TodoTimeField
+      label="计划于"
+      ariaLabel="计划时间"
+      clearTitle="清除计划时间"
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
 function TodoCompletedAt({
   value,
   onChange,
@@ -1715,11 +1758,35 @@ function TodoCompletedAt({
   value: number | null;
   onChange: (value: number | null) => void;
 }) {
+  return (
+    <TodoTimeField
+      label="完成于"
+      ariaLabel="完成时间"
+      clearTitle="清除完成时间"
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
+function TodoTimeField({
+  label,
+  ariaLabel,
+  clearTitle,
+  value,
+  onChange,
+}: {
+  label: string;
+  ariaLabel: string;
+  clearTitle: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+}) {
   const dateValue = value ? formatDateTimeLocal(value) : "";
 
   return (
-    <div className="todo-completed-at">
-      <span>完成于</span>
+    <div className="todo-time-field">
+      <span>{label}</span>
       <input
         type="datetime-local"
         value={dateValue}
@@ -1727,9 +1794,9 @@ function TodoCompletedAt({
           const nextValue = event.currentTarget.value;
           onChange(nextValue ? new Date(nextValue).getTime() : null);
         }}
-        aria-label="完成时间"
+        aria-label={ariaLabel}
       />
-      <button className="todo-time-clear" onClick={() => onChange(null)} title="清除完成时间">
+      <button className="todo-time-clear" onClick={() => onChange(null)} title={clearTitle}>
         <X size={12} />
       </button>
     </div>

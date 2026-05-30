@@ -26,6 +26,7 @@ The primary workflow is grouped todo management. Users define priority groups, a
 - If a todo has more than three images, the row shows a `+N` thumbnail entry so hidden attachments remain reachable.
 - The image preview toolbar supports deleting the current image after confirmation.
 - A todo checkbox toggles completion. Completed todos are visually muted and struck through.
+- Todos can store a planned completion timestamp before they are completed. The planned timestamp is shown under the todo text as `计划于` and can be edited or cleared independently.
 - Completing a todo records a completion timestamp. The timestamp is shown under the todo text and can be edited or cleared.
 - Toggling completion does not change the todo's manual sort order.
 - Todos can be dragged from the row handle to any position, inside the same group or across groups.
@@ -65,7 +66,7 @@ The primary workflow is grouped todo management. Users define priority groups, a
 
 - Current persistence is browser/WebView `localStorage`.
 - Storage key: `edge-todos-state-v1`.
-- State shape is defined in `src/types.ts`. Current state stores `schemaVersion`, templates plus `pages`; each page owns its `templateId`, title, color, and todos. Todos include completion timestamps and per-item text style metadata.
+- State shape is defined in `src/types.ts`. Current state stores `schemaVersion`, templates plus `pages`; each page owns its `templateId`, title, color, and todos. Todos include planned and completion timestamps plus per-item text style metadata.
 - Load/save helpers are in `src/storage.ts`.
 - Loading normalizes older or partially corrupted local data by filling missing page, todo, attachment, template, sort, and window preference fields.
 - Image attachments are stored as compressed data URLs inside todo state.

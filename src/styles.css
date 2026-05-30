@@ -821,7 +821,7 @@ button {
   color: #64748b;
 }
 
-.todo-completed-at {
+.todo-time-field {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -831,7 +831,7 @@ button {
   line-height: 1.2;
 }
 
-.todo-completed-at input {
+.todo-time-field input {
   width: 116px;
   height: 18px;
   border: 0;
