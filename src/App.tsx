@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_TEMPLATES, DEFAULT_PAGE_COLOR, DEFAULT_TODO_STYLE } from "./defaults";
 import { fileToAttachment, isImageFile } from "./image";
-import { closeWindow, detectDockedEdge, getCurrentTauriWindow, getWindowOuterSize, isCursorInRevealStrip, isTauri, onWindowMoved, setWindowAlwaysOnTop, setWindowHidden, setWindowOuterSize, startWindowDragging } from "./tauriWindow";
+import { closeWindow, detectDockedEdge, getCurrentTauriWindow, getWindowOuterSize, isCursorInRevealStrip, isTauri, onWindowMoved, openExternalLink, setWindowAlwaysOnTop, setWindowHidden, setWindowOuterSize, startWindowDragging } from "./tauriWindow";
 import { loadState, normalizeState, saveState } from "./storage";
 import type { AppState, ImageAttachment, Priority, PriorityTemplate, Todo, TodoPage, TodoTextStyle } from "./types";
 
@@ -154,6 +154,34 @@ function App() {
   useEffect(() => {
     saveState(state);
   }, [state]);
+
+  useEffect(() => {
+    function handleModalKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+
+      if (previewImage) {
+        event.preventDefault();
+        setPreviewImage(null);
+        return;
+      }
+
+      if (confirmDialog) {
+        event.preventDefault();
+        setConfirmDialog(null);
+        return;
+      }
+
+      if (settingsOpen || pageManagerOpen || aboutOpen) {
+        event.preventDefault();
+        setSettingsOpen(false);
+        setPageManagerOpen(false);
+        setAboutOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleModalKeyDown);
+    return () => window.removeEventListener("keydown", handleModalKeyDown);
+  }, [aboutOpen, confirmDialog, pageManagerOpen, previewImage, settingsOpen]);
 
   useEffect(() => {
     getCurrentTauriWindow().then((window) => setHasTauriWindow(Boolean(window)));
@@ -451,12 +479,18 @@ function App() {
 
   function addPage() {
     const id = crypto.randomUUID();
-    const fallbackTemplateId = activePage?.templateId || state.templates[0]?.id || "matrix";
-    setState((current) => ({
-      ...current,
-      activePageId: id,
-      pages: [...current.pages, createEmptyPage(id, fallbackTemplateId)],
-    }));
+    setState((current) => {
+      const currentActivePage = getActivePage(current);
+      const fallbackTemplateId = currentActivePage?.templateId || current.templates[0]?.id || "matrix";
+      return {
+        ...current,
+        activePageId: id,
+        pages: [
+          ...current.pages,
+          createEmptyPage(id, fallbackTemplateId, getNextDefaultPageTitle(current.pages)),
+        ],
+      };
+    });
   }
 
   function closePage(pageId: string) {
@@ -1411,8 +1445,8 @@ function PageManagerPanel({
   }
 
   return (
-    <div className="settings-backdrop">
-      <aside className="page-manager-panel">
+    <div className="settings-backdrop" data-testid="page-manager-backdrop" onClick={onClose}>
+      <aside className="page-manager-panel" onClick={(event) => event.stopPropagation()}>
         <header>
           <h2>页签管理</h2>
           <button className="icon-button" onClick={onClose} title="关闭">
@@ -1684,6 +1718,12 @@ function TodoText({
     onStyleChange({ ...style, ...patch });
   }
 
+  function handleOpenLink(url: string) {
+    openExternalLink(url).catch(() => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
+  }
+
   if (editing) {
     return (
       <input
@@ -1706,9 +1746,18 @@ function TodoText({
 
   return (
     <div className="todo-text-wrap">
-      <button className="todo-text-button" onDoubleClick={() => setEditing(true)} title="双击编辑">
-        <MarkdownLine text={text} style={style} completed={completed} />
-      </button>
+      <div
+        className="todo-text-button"
+        role="button"
+        tabIndex={0}
+        onDoubleClick={() => setEditing(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") setEditing(true);
+        }}
+        title="双击编辑"
+      >
+        <MarkdownLine text={text} style={style} completed={completed} onLinkClick={handleOpenLink} />
+      </div>
       <button
         className={`todo-style-toggle${styleOpen ? " is-active" : ""}`}
         onClick={() => setStyleOpen((open) => !open)}
@@ -1778,7 +1827,17 @@ function TodoText({
         </div>
       )}
       {style.link && (
-        <a className="todo-link" href={style.link} target="_blank" rel="noreferrer" title="打开超链接">
+        <a
+          className="todo-link"
+          href={style.link}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => {
+            event.preventDefault();
+            handleOpenLink(style.link);
+          }}
+          title="打开超链接"
+        >
           <Link size={13} />
         </a>
       )}
@@ -1790,10 +1849,12 @@ function MarkdownLine({
   text,
   style,
   completed,
+  onLinkClick,
 }: {
   text: string;
   style: TodoTextStyle;
   completed: boolean;
+  onLinkClick: (url: string) => void;
 }) {
   const lineStyle: CSSProperties = {
     color: style.color || undefined,
@@ -1814,7 +1875,22 @@ function MarkdownLine({
         ul: ({ children }) => <span>{children}</span>,
         li: ({ children }) => <span>{children}</span>,
         input: ({ checked }) => <span className={`md-checkbox ${checked ? "checked" : ""}`} />,
-        a: ({ children }) => <span>{children}</span>,
+        a: ({ children, href }) => {
+          const url = normalizeLink(String(href ?? ""));
+          return (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => {
+                event.preventDefault();
+                onLinkClick(url);
+              }}
+            >
+              {children}
+            </a>
+          );
+        },
       }}
     >
       {`- [ ] ${text}`}
@@ -1988,8 +2064,8 @@ function SettingsPanel({
   }
 
   return (
-    <div className="settings-backdrop">
-      <aside className="settings-panel">
+    <div className="settings-backdrop" data-testid="settings-backdrop" onClick={onClose}>
+      <aside className="settings-panel" onClick={(event) => event.stopPropagation()}>
         <header>
           <h2>设置</h2>
           <button className="icon-button" onClick={onClose} title="关闭">
@@ -2104,14 +2180,25 @@ function getFirstPriority(template: PriorityTemplate) {
   return [...template.priorities].sort((a, b) => a.order - b.order)[0];
 }
 
-function createEmptyPage(id: string, templateId: string): TodoPage {
+function createEmptyPage(id: string, templateId: string, title = DEFAULT_PAGE_TITLE): TodoPage {
   return {
     id,
-    title: DEFAULT_PAGE_TITLE,
+    title,
     color: DEFAULT_PAGE_COLOR,
     templateId,
     todos: [],
   };
+}
+
+function getNextDefaultPageTitle(pages: TodoPage[]) {
+  const existingTitles = new Set(pages.map((page) => page.title.trim()).filter(Boolean));
+  if (!existingTitles.has(DEFAULT_PAGE_TITLE)) return DEFAULT_PAGE_TITLE;
+
+  let index = 2;
+  while (existingTitles.has(`${DEFAULT_PAGE_TITLE} ${index}`)) {
+    index += 1;
+  }
+  return `${DEFAULT_PAGE_TITLE} ${index}`;
 }
 
 function getActivePage(state: AppState) {

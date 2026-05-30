@@ -12,6 +12,7 @@ const mockDetectDockedEdge = vi.fn().mockResolvedValue(null);
 const mockGetCurrentTauriWindow = vi.fn().mockResolvedValue(null);
 const mockOnWindowMoved = vi.fn().mockResolvedValue(() => {});
 const mockIsCursorInRevealStrip = vi.fn().mockResolvedValue(false);
+const mockOpenExternalLink = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("./tauriWindow", () => ({
   getCurrentTauriWindow: () => mockGetCurrentTauriWindow(),
@@ -25,6 +26,7 @@ vi.mock("./tauriWindow", () => ({
   getWindowOuterSize: () => mockGetWindowOuterSize(),
   setWindowOuterSize: (size: { width: number; height: number }) => mockSetWindowOuterSize(size),
   closeWindow: () => mockCloseWindow(),
+  openExternalLink: (url: string) => mockOpenExternalLink(url),
   isTauri: false,
 }));
 
@@ -542,6 +544,77 @@ describe("GitHub issues — todo controls", () => {
       expect(saved.pages[0].todos[0].attachments).toHaveLength(1);
       expect(saved.pages[0].todos[0].attachments[0].name).toBe("todo.gif");
     });
+  });
+
+  it("opens markdown links externally without navigating the app WebView", () => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        schemaVersion: 2,
+        templates: [
+          {
+            id: "matrix",
+            name: "四象限优先级",
+            priorities: [{ id: "p1", name: "🔥 高", order: 0 }],
+          },
+        ],
+        pages: [
+          {
+            id: "page-1",
+            title: "待办事项",
+            color: "#f8fafc",
+            templateId: "matrix",
+            todos: [
+              {
+                id: "todo-link",
+                text: "点我 [链接](https://example.com)",
+                priorityId: "p1",
+                completed: false,
+                createdAt: 1,
+                updatedAt: 1,
+                sortIndex: 0,
+                attachments: [],
+              },
+            ],
+          },
+        ],
+        activePageId: "page-1",
+        windowPrefs: { edge: null, hidden: false },
+      })
+    );
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("link", { name: "链接" }));
+
+    expect(mockOpenExternalLink).toHaveBeenCalledWith("https://example.com");
+  });
+
+  it("creates distinguishable default titles for new pages", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle("新建页签"));
+    fireEvent.click(screen.getByTitle("新建页签"));
+
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages.map((page: { title: string }) => page.title)).toEqual([
+      "待办事项",
+      "待办事项 2",
+      "待办事项 3",
+    ]);
+  });
+
+  it("closes settings and page manager panels with Escape and backdrop clicks", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle("设置"));
+    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("heading", { name: "设置" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("页签管理"));
+    expect(screen.getByRole("heading", { name: "页签管理" })).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("page-manager-backdrop"));
+    expect(screen.queryByRole("heading", { name: "页签管理" })).not.toBeInTheDocument();
   });
 });
 

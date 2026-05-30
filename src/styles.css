@@ -191,8 +191,9 @@ button {
   min-width: 152px;
   max-width: 214px;
   border-color: var(--line);
+  border-top-color: #2563eb;
   border-bottom-color: transparent;
-  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 3px 0 #2563eb, 0 -1px 0 rgba(255, 255, 255, 0.4);
   z-index: 4;
 }
 
@@ -574,19 +575,19 @@ button {
   color: inherit;
   text-align: left;
   background: transparent;
+  cursor: text;
 }
 
 .markdown-line {
   min-width: 0;
-  display: inline-block;
+  display: block;
   max-width: 100%;
-  overflow: hidden;
   color: #172033;
   font-size: 13px;
   font-weight: 450;
   line-height: 1.28;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .is-completed .markdown-line {
@@ -596,8 +597,9 @@ button {
 }
 
 .markdown-line a {
-  color: inherit;
-  text-decoration: inherit;
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .markdown-line span {

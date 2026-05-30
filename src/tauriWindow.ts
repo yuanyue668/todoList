@@ -44,6 +44,17 @@ export async function closeWindow(): Promise<void> {
   await win.hide();
 }
 
+export async function openExternalLink(url: string): Promise<void> {
+  if (!url) return;
+  if (!isTauri) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("plugin:opener|open_url", { url });
+}
+
 export async function setWindowAlwaysOnTop(value: boolean): Promise<void> {
   if (!isTauri) return;
   const win = await getWindow();
@@ -136,9 +147,9 @@ export function getEdgeWindowPosition(
 ): PhysicalPosition {
   const visiblePosition = {
     left: { x: 0, y: clamp(position.y, 0, screen.height - size.height) },
-    right: { x: screen.width - size.width, y: clamp(position.y, 0, screen.height - size.height) },
+    right: { x: Math.max(0, screen.width - size.width), y: clamp(position.y, 0, screen.height - size.height) },
     top: { x: clamp(position.x, 0, screen.width - size.width), y: 0 },
-    bottom: { x: clamp(position.x, 0, screen.width - size.width), y: screen.height - size.height },
+    bottom: { x: clamp(position.x, 0, screen.width - size.width), y: Math.max(0, screen.height - size.height) },
   }[edge];
 
   const hiddenPosition = {
@@ -190,5 +201,6 @@ export async function onWindowMoved(callback: () => void): Promise<() => void> {
 }
 
 function clamp(value: number, min: number, max: number) {
+  if (max < min) return min;
   return Math.max(min, Math.min(max, value));
 }

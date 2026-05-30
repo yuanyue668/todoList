@@ -403,6 +403,47 @@ function Get-ElementCenter([string]$Selector) {
   $json | ConvertFrom-Json
 }
 
+function Get-TitledElementDiagnostics {
+  Invoke-CdpExpression @"
+(() => {
+  const titledElements = [...document.querySelectorAll('[title]')].map((el) => {
+    const rect = el.getBoundingClientRect();
+    return {
+      tag: el.tagName,
+      title: el.getAttribute('title'),
+      className: String(el.className),
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  });
+
+  return JSON.stringify({
+    readyState: document.readyState,
+    titleCount: titledElements.length,
+    titles: titledElements.slice(0, 80),
+  });
+})()
+"@
+}
+
+function Wait-ForElementCenter([string]$Selector, [string]$Description, [int]$Timeout = 6) {
+  $deadline = (Get-Date).AddSeconds($Timeout)
+  do {
+    $script:waitedElementCenter = Get-ElementCenter $Selector
+    if ($script:waitedElementCenter) { return $script:waitedElementCenter }
+    Start-Sleep -Milliseconds 100
+  } while ((Get-Date) -lt $deadline)
+
+  $diagnostics = Get-TitledElementDiagnostics
+  throw "Timed out waiting for: $Description. Available titled elements: $diagnostics"
+}
+
+function Get-PinButtonCenter {
+  Wait-ForElementCenter '.win-controls .win-btn:not(.win-btn-close).is-active' "active pin control before hide/reveal smoke check"
+}
+
 function Get-WindowPrefs {
   $json = Invoke-CdpExpression @"
 (() => {
@@ -565,6 +606,38 @@ function Test-BasicInputPath($Handle, [System.Collections.Generic.List[string]]$
   }
 }
 
+function Enable-AutoHideForSmoke($Handle, [System.Collections.Generic.List[string]]$Failures) {
+  try {
+    $pinButton = Get-PinButtonCenter
+  } catch {
+    $alreadyUnpinned = [bool](Invoke-CdpExpression "Boolean(document.querySelector('.win-controls .win-btn:not(.win-btn-close):not(.is-active)'))")
+    if ($alreadyUnpinned) {
+      Write-Step "Pin control is already unpinned"
+      return
+    }
+
+    $Failures.Add($_.Exception.Message)
+    Write-Step "FAIL: $($_.Exception.Message)"
+    return
+  }
+
+  $windowRect = Get-Rect $Handle
+  $screenPoint = Convert-CssPointToScreen $windowRect $pinButton
+  [Win32WindowProbe]::SetForegroundWindow($Handle) | Out-Null
+  Start-Sleep -Milliseconds 150
+  Click-Point $screenPoint.X $screenPoint.Y
+
+  try {
+    Wait-Until {
+      [bool](Invoke-CdpExpression "Boolean(document.querySelector('.win-controls .win-btn:not(.win-btn-close):not(.is-active)'))")
+    } "pin control to switch into auto-hide mode" 4
+    Write-Step "Auto-hide mode enabled through pin control"
+  } catch {
+    $Failures.Add($_.Exception.Message)
+    Write-Step "FAIL: $($_.Exception.Message)"
+  }
+}
+
 function Cleanup {
   if ($script:cleanupDone) { return }
   $script:cleanupDone = $true
@@ -724,6 +797,8 @@ try {
   $failures.Add("$($_.Exception.Message). Current app edge=$edgeText")
   Write-Step "FAIL: $($_.Exception.Message). Current app edge=$edgeText"
 }
+
+Enable-AutoHideForSmoke $handle $failures
 
 [Win32WindowProbe]::SetForegroundWindow($handle) | Out-Null
 Move-Mouse ($atEdge.Left + 24) ($atEdge.Top + 80)

@@ -27,6 +27,30 @@ describe("edge window positions", () => {
     expect(revealed).toEqual({ x: 0, y: 120 });
   });
 
+  it("keeps an oversized bottom-docked window reachable when revealed", () => {
+    const revealed = getEdgeWindowPosition(
+      "bottom",
+      false,
+      { x: 293, y: -1416 },
+      { width: 788, height: 1427 },
+      { width: 1707, height: 960 }
+    );
+
+    expect(revealed.y).toBe(0);
+  });
+
+  it("keeps an oversized right-docked window reachable when revealed", () => {
+    const revealed = getEdgeWindowPosition(
+      "right",
+      false,
+      { x: 1600, y: 10 },
+      { width: 1880, height: 640 },
+      { width: 1707, height: 960 }
+    );
+
+    expect(revealed.x).toBe(0);
+  });
+
   it("detects the cursor inside the visible left reveal strip", () => {
     expect(
       isCursorInsideVisibleStrip(

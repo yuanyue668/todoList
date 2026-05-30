@@ -5,15 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-05-30
+
 ### Added
 - Todo rows now support adding images after creation, editable completion timestamps, and per-item text styling for bold/italic/underline/strikethrough, color, highlight, and links.
 - New todo composers can be closed with a close button or `Esc`.
 
 ### Changed
+- New page tabs now get numbered default titles so multiple new pages are distinguishable, and the active page tab has a stronger visual accent.
+- Long todo text now wraps in the list instead of being clipped to one line.
 - Todo drag sorting now starts from a dedicated row handle.
 - The pin button now keeps a docked window visible instead of allowing edge auto-hide.
 
 ### Fixed
+- Windows: removed the duplicate automatic tray icon so the app shows only the Rust-managed tray icon with the working menu.
+- Windows: restored window geometry is clamped to the current monitor and oversized saved windows are reduced to a recoverable widget size.
+- Todo Markdown links and style links now open externally instead of navigating the app WebView away from Edge Todos.
+- Settings and page-manager panels now close with `Esc` and by clicking the backdrop.
 - Moving a resized desktop window now preserves the current outer size during the drag.
 
 ## [1.0.5] - 2026-05-28
