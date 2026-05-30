@@ -341,7 +341,6 @@ function App() {
         todo.id === todoId
           ? {
               ...todo,
-              completed: completedAt !== null,
               completedAt,
               updatedAt: Date.now(),
             }

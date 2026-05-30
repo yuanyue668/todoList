@@ -498,9 +498,9 @@ describe("GitHub issues — todo controls", () => {
 
     fireEvent.click(screen.getByTitle("清除完成时间"));
     saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
-    expect(saved.pages[0].todos[0].completed).toBe(false);
+    expect(saved.pages[0].todos[0].completed).toBe(true);
     expect(saved.pages[0].todos[0].completedAt).toBeNull();
-    expect(screen.queryByText("完成于")).not.toBeInTheDocument();
+    expect(screen.getByText("完成于")).toBeInTheDocument();
   });
 
   it("applies a text style from the style toolbar", () => {
