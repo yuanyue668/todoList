@@ -4,6 +4,7 @@ import remarkGemoji from "remark-gemoji";
 import remarkGfm from "remark-gfm";
 import {
   Bold,
+  CalendarClock,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -22,6 +23,7 @@ import {
   Palette,
   Pin,
   Plus,
+  RotateCcw,
   Save,
   Settings,
   Strikethrough,
@@ -1136,120 +1138,134 @@ function PriorityGroup({
           onDragOverTodoChange(null);
         }}
       >
-        {todos.map((todo) => (
-          <article
-            className={`todo-item ${todo.completed ? "is-completed" : ""} ${
-              draggingTodoId === todo.id ? "is-dragging" : ""
-            } ${dragOverTodoId === todo.id ? "is-drop-target" : ""}`}
-            key={todo.id}
-            data-todo-id={todo.id}
-            data-priority-id={todo.priorityId}
-            draggable={false}
-            onDragEnd={() => {
-              onDraggingTodoChange(null);
-              onDragOverTodoChange(null);
-            }}
-            onDragOver={(event) => {
-              const draggedId = (event.dataTransfer?.getData("text/plain") ?? "") || draggingTodoId;
-              if (draggedId === todo.id) return;
-              event.preventDefault();
-              event.stopPropagation();
-              if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-              onDragOverTodoChange(todo.id);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              const draggedId = event.dataTransfer.getData("text/plain") || draggingTodoId;
-              if (!draggedId || draggedId === todo.id) return;
-              onMoveBefore(draggedId, todo.id);
-              onDraggingTodoChange(null);
-              onDragOverTodoChange(null);
-            }}
-          >
-            <button
-              className="todo-drag-handle"
-              draggable
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                event.preventDefault();
-                event.stopPropagation();
-                pointerDragRef.current = { todoId: todo.id, pointerId: event.pointerId };
-                event.currentTarget.setPointerCapture?.(event.pointerId);
-                onDraggingTodoChange(todo.id);
-              }}
-              onPointerMove={movePointerDragIndicator}
-              onPointerUp={finishPointerDrag}
-              onPointerCancel={(event) => {
-                if (pointerDragRef.current?.pointerId !== event.pointerId) return;
-                pointerDragRef.current = null;
-                event.currentTarget.releasePointerCapture?.(event.pointerId);
-                onDraggingTodoChange(null);
-                onDragOverTodoChange(null);
-              }}
-              onDragStart={(event) => {
-                onDraggingTodoChange(todo.id);
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", todo.id);
-              }}
-              onDragEnd={() => {
-                onDraggingTodoChange(null);
-                onDragOverTodoChange(null);
-              }}
-              title="拖拽排序"
-            >
-              <GripVertical size={14} />
-            </button>
-            <button
-              className={`checkbox ${todo.completed ? "checked" : ""}`}
-              onClick={() => onToggle(todo.id)}
-              title={todo.completed ? "标记为未完成" : "标记为完成"}
-            >
-              {todo.completed && <Check size={14} />}
-            </button>
-            <div className="todo-content">
-              <TodoText
-                text={todo.text}
-                style={todo.style}
-                completed={todo.completed}
-                onChange={(text) => onTextChange(todo.id, text)}
-                onStyleChange={(style) => onStyleChange(todo.id, style)}
-              />
-              {(!todo.completed || todo.plannedAt !== null) && (
-                <TodoPlannedAt
-                  value={todo.plannedAt}
-                  onChange={(plannedAt) => onPlannedAtChange(todo.id, plannedAt)}
-                />
+        {todos.map((todo) => {
+          const plannedAt = todo.plannedAt;
+          const completedAt = todo.completedAt;
+          const showPlannedAt = plannedAt !== null;
+          const showCompletedAt = todo.completed && completedAt !== null;
+          const showTimeMeta = showPlannedAt || showCompletedAt;
+
+          return (
+            <div className="todo-entry" key={todo.id}>
+              <article
+                className={`todo-item ${todo.completed ? "is-completed" : ""} ${
+                  draggingTodoId === todo.id ? "is-dragging" : ""
+                } ${dragOverTodoId === todo.id ? "is-drop-target" : ""}`}
+                data-todo-id={todo.id}
+                data-priority-id={todo.priorityId}
+                draggable={false}
+                onDragEnd={() => {
+                  onDraggingTodoChange(null);
+                  onDragOverTodoChange(null);
+                }}
+                onDragOver={(event) => {
+                  const draggedId = (event.dataTransfer?.getData("text/plain") ?? "") || draggingTodoId;
+                  if (draggedId === todo.id) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                  onDragOverTodoChange(todo.id);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const draggedId = event.dataTransfer.getData("text/plain") || draggingTodoId;
+                  if (!draggedId || draggedId === todo.id) return;
+                  onMoveBefore(draggedId, todo.id);
+                  onDraggingTodoChange(null);
+                  onDragOverTodoChange(null);
+                }}
+              >
+                <button
+                  className="todo-drag-handle"
+                  draggable
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    pointerDragRef.current = { todoId: todo.id, pointerId: event.pointerId };
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                    onDraggingTodoChange(todo.id);
+                  }}
+                  onPointerMove={movePointerDragIndicator}
+                  onPointerUp={finishPointerDrag}
+                  onPointerCancel={(event) => {
+                    if (pointerDragRef.current?.pointerId !== event.pointerId) return;
+                    pointerDragRef.current = null;
+                    event.currentTarget.releasePointerCapture?.(event.pointerId);
+                    onDraggingTodoChange(null);
+                    onDragOverTodoChange(null);
+                  }}
+                  onDragStart={(event) => {
+                    onDraggingTodoChange(todo.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", todo.id);
+                  }}
+                  onDragEnd={() => {
+                    onDraggingTodoChange(null);
+                    onDragOverTodoChange(null);
+                  }}
+                  title="拖拽排序"
+                >
+                  <GripVertical size={14} />
+                </button>
+                <button
+                  className={`checkbox ${todo.completed ? "checked" : ""}`}
+                  onClick={() => onToggle(todo.id)}
+                  title={todo.completed ? "标记为未完成" : "标记为完成"}
+                >
+                  {todo.completed && <Check size={14} />}
+                </button>
+                <div className="todo-content">
+                  <TodoText
+                    text={todo.text}
+                    style={todo.style}
+                    completed={todo.completed}
+                    onChange={(text) => onTextChange(todo.id, text)}
+                    onStyleChange={(style) => onStyleChange(todo.id, style)}
+                  />
+                </div>
+                <div className="todo-actions">
+                  <TodoTimeAction
+                    completed={todo.completed}
+                    plannedAt={todo.plannedAt}
+                    completedAt={todo.completedAt}
+                    onPlannedAtChange={(plannedAt) => onPlannedAtChange(todo.id, plannedAt)}
+                    onCompletedAtChange={(completedAt) => onCompletedAtChange(todo.id, completedAt)}
+                  />
+                  <TodoAttachmentButton onFiles={(files) => addAttachmentsToTodo(todo.id, files)} />
+                  <button className="delete-button" onClick={() => onDelete(todo.id)} title="删除">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </article>
+              {showTimeMeta && (
+                <div className="todo-meta-card">
+                  {showPlannedAt && (
+                    <TodoTimeDisplay label="计划于" value={plannedAt} />
+                  )}
+                  {showCompletedAt && (
+                    <TodoTimeDisplay label="完成于" value={completedAt} />
+                  )}
+                </div>
               )}
-              {todo.completed && (
-                <TodoCompletedAt
-                  value={todo.completedAt}
-                  onChange={(completedAt) => onCompletedAtChange(todo.id, completedAt)}
-                />
+              {todo.attachments.length > 0 && (
+                <div className="thumb-strip">
+                  {todo.attachments.slice(0, 3).map((attachment) => (
+                    <button className="thumb" key={attachment.id} onClick={() => onPreview(todo.id, attachment.id)}>
+                      <img src={attachment.dataUrl} alt={attachment.name} />
+                    </button>
+                  ))}
+                  {todo.attachments.length > 3 && (
+                    <button className="thumb thumb-more" onClick={() => onPreview(todo.id, todo.attachments[3].id)}>
+                      +{todo.attachments.length - 3}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-            {todo.attachments.length > 0 && (
-              <div className="thumb-strip">
-                {todo.attachments.slice(0, 3).map((attachment) => (
-                  <button className="thumb" key={attachment.id} onClick={() => onPreview(todo.id, attachment.id)}>
-                    <img src={attachment.dataUrl} alt={attachment.name} />
-                  </button>
-                ))}
-                {todo.attachments.length > 3 && (
-                  <button className="thumb thumb-more" onClick={() => onPreview(todo.id, todo.attachments[3].id)}>
-                    +{todo.attachments.length - 3}
-                  </button>
-                )}
-              </div>
-            )}
-            <div className="todo-actions">
-              <TodoAttachmentButton onFiles={(files) => addAttachmentsToTodo(todo.id, files)} />
-              <button className="delete-button" onClick={() => onDelete(todo.id)} title="删除">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </article>
-        ))}
+          );
+        })}
         {todos.length === 0 && <div className="empty-group">暂无事项</div>}
       </div>
     </div>
@@ -1733,90 +1749,73 @@ function TodoAttachmentButton({ onFiles }: { onFiles: (files: FileList) => void 
   );
 }
 
-function TodoPlannedAt({
-  value,
-  onChange,
+function TodoTimeAction({
+  completed,
+  plannedAt,
+  completedAt,
+  onPlannedAtChange,
+  onCompletedAtChange,
 }: {
-  value: number | null;
-  onChange: (value: number | null) => void;
+  completed: boolean;
+  plannedAt: number | null;
+  completedAt: number | null;
+  onPlannedAtChange: (value: number | null) => void;
+  onCompletedAtChange: (value: number | null) => void;
 }) {
-  const [editing, setEditing] = useState(value !== null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const value = completed ? completedAt : plannedAt;
+  const dateValue = value ? formatDateTimeLocal(value) : "";
+  const title = completed ? "修改完成时间" : plannedAt === null ? "设置计划时间" : "修改计划时间";
+  const ariaLabel = completed ? "完成时间" : "计划时间";
 
-  useEffect(() => {
-    if (value !== null) setEditing(true);
-  }, [value]);
-
-  if (value === null && !editing) {
-    return (
-      <button className="todo-time-add" onClick={() => setEditing(true)} title="设置计划时间">
-        <Plus size={12} />
-        设置计划时间
-      </button>
-    );
+  function openPicker() {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    const picker = input as HTMLInputElement & { showPicker?: () => void };
+    try {
+      if (typeof picker.showPicker === "function") {
+        picker.showPicker();
+      } else {
+        input.click();
+      }
+    } catch {
+      input.click();
+    }
   }
 
   return (
-    <TodoTimeField
-      label="计划于"
-      ariaLabel="计划时间"
-      clearTitle="清除计划时间"
-      value={value}
-      onChange={(nextValue) => {
-        onChange(nextValue);
-        if (nextValue === null) setEditing(false);
-      }}
-    />
+    <span className="todo-time-action">
+      <button className="delete-button" onClick={openPicker} title={title}>
+        <CalendarClock size={16} />
+      </button>
+      <input
+        ref={inputRef}
+        className="todo-time-picker"
+        type="datetime-local"
+        value={dateValue}
+        aria-label={ariaLabel}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.value;
+          const nextTimestamp = nextValue ? new Date(nextValue).getTime() : null;
+          if (completed) {
+            onCompletedAtChange(nextTimestamp);
+            if (nextTimestamp === null) onPlannedAtChange(null);
+          } else {
+            onPlannedAtChange(nextTimestamp);
+          }
+        }}
+      />
+    </span>
   );
 }
 
-function TodoCompletedAt({
-  value,
-  onChange,
-}: {
-  value: number | null;
-  onChange: (value: number | null) => void;
-}) {
-  return (
-    <TodoTimeField
-      label="完成于"
-      ariaLabel="完成时间"
-      clearTitle="清除完成时间"
-      value={value}
-      onChange={onChange}
-    />
-  );
-}
-
-function TodoTimeField({
-  label,
-  ariaLabel,
-  clearTitle,
-  value,
-  onChange,
-}: {
-  label: string;
-  ariaLabel: string;
-  clearTitle: string;
-  value: number | null;
-  onChange: (value: number | null) => void;
-}) {
-  const dateValue = value ? formatDateTimeLocal(value) : "";
-
+function TodoTimeDisplay({ label, value }: { label: string; value: number }) {
   return (
     <div className="todo-time-field">
       <span>{label}</span>
-      <input
-        type="datetime-local"
-        value={dateValue}
-        onChange={(event) => {
-          const nextValue = event.currentTarget.value;
-          onChange(nextValue ? new Date(nextValue).getTime() : null);
-        }}
-        aria-label={ariaLabel}
-      />
-      <button className="todo-time-clear" onClick={() => onChange(null)} title={clearTitle}>
-        <X size={12} />
-      </button>
+      <time dateTime={formatDateTimeLocal(value)}>{formatDateTimeDisplay(value)}</time>
+      {label === "计划于" && <span>完成</span>}
     </div>
   );
 }
@@ -1992,9 +1991,9 @@ function TodoText({
               setLinkDraft("");
               onStyleChange(DEFAULT_TODO_STYLE);
             }}
-            title="清除样式"
+            title="重置样式"
           >
-            <X size={14} />
+            <RotateCcw size={14} />
           </button>
         </div>
       )}
@@ -2393,6 +2392,10 @@ function formatDateTimeLocal(timestamp: number) {
   const date = new Date(timestamp);
   const offsetMs = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function formatDateTimeDisplay(timestamp: number) {
+  return formatDateTimeLocal(timestamp).replace(/-/g, "/").replace("T", " ");
 }
 
 function normalizeLink(value: string) {

@@ -22,12 +22,12 @@ The primary workflow is grouped todo management. Users define priority groups, a
 - Todo text supports per-item styling for bold, italic, underline, strikethrough, font color, highlight color, and an optional link.
 - Todos support image attachments through paste or file selection.
 - Existing todos can add more image attachments from the row action.
-- Images render as thumbnails on the right side of a todo. Clicking a thumbnail opens a larger preview with a toolbar.
+- Images render as thumbnails in a separate row below any time metadata. Clicking a thumbnail opens a larger preview with a toolbar.
 - If a todo has more than three images, the row shows a `+N` thumbnail entry so hidden attachments remain reachable.
 - The image preview toolbar supports deleting the current image after confirmation.
 - A todo checkbox toggles completion. Completed todos are visually muted and struck through.
-- Todos can store a planned completion timestamp before they are completed. The planned timestamp is shown under the todo text as `计划于` and can be edited or cleared independently.
-- Completing a todo records a completion timestamp. The timestamp is shown under the todo text and can be edited or cleared.
+- Todos can store a planned completion timestamp before they are completed. The time icon in the todo row opens the native datetime picker directly. Until a planned time is saved, no planned-time metadata frame is shown. Saved planned time is shown below the todo card in a light gray read-only metadata frame as `计划于 yyyy/mm/dd HH:mm 完成`.
+- Completing a todo records a completion timestamp. The row time icon remains available after completion and edits the completion timestamp directly; the timestamp is shown below the todo card in the same read-only metadata frame as `完成于`. Clearing the completion timestamp also clears any saved planned completion timestamp.
 - Toggling completion does not change the todo's manual sort order.
 - Todos can be dragged from the row handle to any position, inside the same group or across groups.
 - Dropping on another todo inserts before that todo. Dropping on group empty space appends to the group.

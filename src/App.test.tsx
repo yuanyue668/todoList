@@ -515,29 +515,37 @@ describe("GitHub issues — todo controls", () => {
     expect(saved.pages[0].todos[0].completedAt).toBe(new Date("2026-05-28T10:20:00+08:00").getTime());
   });
 
-  it("allows editing and clearing the completion time", () => {
+  it("keeps the time icon after completion and edits completion time from it", () => {
     render(<App />);
     fireEvent.click(screen.getByTitle("标记为完成"));
 
+    expect(screen.getByTitle("修改完成时间")).toBeInTheDocument();
+    expect(screen.getByText("完成于").closest(".todo-meta-card")?.querySelector("input")).toBeNull();
+    expect(screen.getByText("完成于").closest(".todo-meta-card")?.querySelector("button")).toBeNull();
+
     fireEvent.change(screen.getByLabelText("完成时间"), { target: { value: "2026-05-28T09:30" } });
-    let saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
     expect(saved.pages[0].todos[0].completed).toBe(true);
     expect(saved.pages[0].todos[0].completedAt).toBe(new Date("2026-05-28T09:30").getTime());
-
-    fireEvent.click(screen.getByTitle("清除完成时间"));
-    saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
-    expect(saved.pages[0].todos[0].completed).toBe(true);
-    expect(saved.pages[0].todos[0].completedAt).toBeNull();
-    expect(screen.getByText("完成于")).toBeInTheDocument();
+    expect(screen.getByTitle("修改完成时间")).toBeInTheDocument();
   });
 
-  it("allows setting and clearing a planned time before completion", () => {
+  it("sets and edits planned time directly from the row time icon", () => {
     render(<App />);
 
     expect(screen.queryByText("计划于")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("计划时间")).not.toBeInTheDocument();
     expect(screen.queryByTitle("清除计划时间")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("设置计划时间"));
+    expect(screen.queryByText("设置计划时间")).not.toBeInTheDocument();
+
+    const todoCard = screen.getByText("任务 A").closest("article")!;
+    const plannedButton = screen.getByTitle("设置计划时间");
+    expect(plannedButton.closest(".todo-actions")).toBeTruthy();
+    expect(plannedButton.querySelector("svg")).toBeTruthy();
+    expect(todoCard.querySelector("[title='文字样式']")).toBeTruthy();
+    expect(todoCard.querySelector("[title='给事项添加图片']")).toBeTruthy();
+
+    fireEvent.click(plannedButton);
+    expect(screen.queryByText("计划于")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("计划时间"), { target: { value: "2026-05-29T12:15" } });
     let saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
@@ -545,12 +553,32 @@ describe("GitHub issues — todo controls", () => {
     expect(saved.pages[0].todos[0].completedAt).toBeNull();
     expect(saved.pages[0].todos[0].plannedAt).toBe(new Date("2026-05-29T12:15").getTime());
     expect(screen.getByText("计划于")).toBeInTheDocument();
+    expect(screen.getByText("计划于").closest(".todo-time-field")).toHaveTextContent(
+      "计划于2026/05/29 12:15完成",
+    );
+    expect(screen.getByText("计划于").closest(".todo-meta-card")?.querySelector("input")).toBeNull();
+    expect(screen.getByText("计划于").closest(".todo-meta-card")?.querySelector("button")).toBeNull();
+    expect(screen.getByTitle("修改计划时间")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("清除计划时间"));
+    fireEvent.change(screen.getByLabelText("计划时间"), { target: { value: "2026-05-29T18:45" } });
     saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].plannedAt).toBe(new Date("2026-05-29T18:45").getTime());
+    expect(screen.getByTitle("修改计划时间")).toBeInTheDocument();
+  });
+
+  it("clears planned time when completed time is cleared", () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("计划时间"), { target: { value: "2026-05-29T12:15" } });
+    fireEvent.click(screen.getByTitle("标记为完成"));
+    fireEvent.change(screen.getByLabelText("完成时间"), { target: { value: "" } });
+
+    const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
+    expect(saved.pages[0].todos[0].completed).toBe(true);
+    expect(saved.pages[0].todos[0].completedAt).toBeNull();
     expect(saved.pages[0].todos[0].plannedAt).toBeNull();
     expect(screen.queryByText("计划于")).not.toBeInTheDocument();
-    expect(screen.getByTitle("设置计划时间")).toBeInTheDocument();
+    expect(screen.queryByText("完成于")).not.toBeInTheDocument();
   });
 
   it("applies a text style from the style toolbar", () => {
@@ -560,6 +588,14 @@ describe("GitHub issues — todo controls", () => {
 
     const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
     expect(saved.pages[0].todos[0].style.bold).toBe(true);
+  });
+
+  it("uses a reset action for clearing text styles", () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle("文字样式"));
+
+    expect(screen.getByTitle("重置样式")).toBeInTheDocument();
+    expect(screen.queryByTitle("清除样式")).not.toBeInTheDocument();
   });
 
   it("closes the text style panel with Escape and outside clicks", () => {
@@ -599,7 +635,7 @@ describe("GitHub issues — todo controls", () => {
   it("adds an image to an existing todo from the row action", () => {
     render(<App />);
     const file = new File(["GIF89a"], "todo.gif", { type: "image/gif" });
-    const input = screen.getByTitle("给事项添加图片").parentElement!.querySelector("input")!;
+    const input = screen.getByTitle("给事项添加图片").parentElement!.querySelector('input[type="file"]')!;
 
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -608,6 +644,66 @@ describe("GitHub issues — todo controls", () => {
       expect(saved.pages[0].todos[0].attachments).toHaveLength(1);
       expect(saved.pages[0].todos[0].attachments[0].name).toBe("todo.gif");
     });
+  });
+
+  it("renders time metadata before attachments outside the todo card", () => {
+    localStorage.setItem(
+      "edge-todos-state-v1",
+      JSON.stringify({
+        schemaVersion: 2,
+        templates: [
+          {
+            id: "matrix",
+            name: "四象限优先级",
+            priorities: [{ id: "p1", name: "🔥 高", order: 0 }],
+          },
+        ],
+        pages: [
+          {
+            id: "page-1",
+            title: "待办事项",
+            color: "#f8fafc",
+            templateId: "matrix",
+            todos: [
+              {
+                id: "todo-with-meta",
+                text: "带附件和时间",
+                priorityId: "p1",
+                completed: true,
+                createdAt: 1,
+                updatedAt: 1,
+                sortIndex: 0,
+                plannedAt: new Date("2026-05-29T12:15").getTime(),
+                completedAt: new Date("2026-05-30T09:30").getTime(),
+                attachments: [
+                  {
+                    id: "img-1",
+                    name: "todo.gif",
+                    type: "image/gif",
+                    dataUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+                    createdAt: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        activePageId: "page-1",
+        windowPrefs: { edge: null, hidden: false },
+      })
+    );
+
+    render(<App />);
+
+    const todoCard = screen.getByText("带附件和时间").closest("article")!;
+    const attachmentRow = screen.getByAltText("todo.gif").closest(".thumb-strip")!;
+    const metaCard = screen.getByText("计划于").closest(".todo-meta-card")!;
+
+    expect(attachmentRow.closest(".todo-item")).toBeNull();
+    expect(metaCard.closest(".todo-item")).toBeNull();
+    expect(todoCard.compareDocumentPosition(metaCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(metaCard.compareDocumentPosition(attachmentRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("完成于").closest(".todo-meta-card")).toBe(metaCard);
   });
 
   it("opens markdown links externally without navigating the app WebView", () => {

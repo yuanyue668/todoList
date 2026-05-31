@@ -479,17 +479,22 @@ button {
 
 .group-items {
   display: grid;
-  gap: 4px;
+  gap: 7px;
   min-height: 32px;
+}
+
+.todo-entry {
+  display: grid;
+  row-gap: 0;
 }
 
 .todo-item {
   position: relative;
   min-height: 34px;
   display: grid;
-  grid-template-columns: 16px 20px minmax(0, 1fr) auto auto;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
   gap: 5px;
-  align-items: start;
+  align-items: center;
   padding: 4px 6px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 6px;
@@ -532,8 +537,8 @@ button {
 }
 
 .checkbox {
-  width: 18px;
-  height: 18px;
+  width: 12px;
+  height: 12px;
   align-self: center;
   display: inline-flex;
   align-items: center;
@@ -550,8 +555,8 @@ button {
 }
 
 .checkbox svg {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   flex: 0 0 auto;
   stroke-width: 3.2;
 }
@@ -665,7 +670,7 @@ button {
   z-index: 12;
   width: min(284px, calc(100vw - 30px));
   display: grid;
-  grid-template-columns: repeat(4, 24px) repeat(2, 28px) minmax(86px, 1fr) 24px;
+  grid-template-columns: repeat(4, 24px) repeat(2, 24px) minmax(72px, 1fr) 24px;
   gap: 4px;
   align-items: center;
   padding: 6px;
@@ -673,6 +678,7 @@ button {
   border-radius: 7px;
   background: #ffffff;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
 }
 
 .todo-style-panel button,
@@ -742,9 +748,12 @@ button {
 
 .thumb-strip {
   display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-  max-width: 112px;
+  justify-content: flex-start;
+  gap: 5px;
+  max-width: none;
+  margin-left: 20px;
+  margin-top: 4px;
+  padding: 0;
 }
 
 .thumb {
@@ -787,6 +796,7 @@ button {
 
 .todo-actions {
   display: flex;
+  align-self: center;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
@@ -832,45 +842,47 @@ button {
   line-height: 1.2;
 }
 
-.todo-time-field input {
-  width: 116px;
-  height: 18px;
-  border: 0;
-  padding: 0;
-  color: #64748b;
-  background: transparent;
-  font-size: 10.5px;
+.todo-meta-card {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  margin-left: 20px;
+  margin-top: -1px;
+  padding: 4px 7px 2px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+  background: #f1f5f9;
 }
 
-.todo-time-clear {
-  width: 16px;
-  height: 16px;
+.todo-meta-card .todo-time-field {
+  margin-top: 0;
+  line-height: 1;
+}
+
+.todo-time-field time {
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+
+.todo-time-action {
+  position: relative;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  border-radius: 4px;
-  color: #94a3b8;
-  background: transparent;
+  flex: 0 0 auto;
 }
 
-.todo-time-add {
-  width: fit-content;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-top: 3px;
-  padding: 0 6px;
-  border-radius: 5px;
-  color: #64748b;
-  background: transparent;
-  font-size: 10.5px;
-}
-
-.todo-time-add:hover {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
+.todo-time-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .settings-backdrop,
@@ -1260,12 +1272,11 @@ button {
 
 @media (max-width: 430px) {
   .todo-item {
-    grid-template-columns: 24px minmax(0, 1fr) 32px;
+    grid-template-columns: 16px 20px minmax(0, 1fr) auto;
   }
 
-  .thumb-strip {
-    grid-column: 2 / 3;
-    justify-content: flex-start;
-    max-width: 100%;
+  .thumb-strip,
+  .todo-meta-card {
+    margin-left: 18px;
   }
 }

@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-06-01
+
+### Changed
+- Planned and completed todo timestamps now render as compact metadata rows outside the todo card.
+- Planned time now displays as `计划于 yyyy/mm/dd HH:mm 完成`.
+- Completed todo checkboxes are smaller to reduce visual weight.
+
+### Fixed
+- Clearing a completed todo's completion time now also clears its planned completion time.
+- Todo row action icons stay aligned when todo text wraps.
+- Text style reset now uses a reset icon and stays inside the style panel.
+
 ## [1.0.8] - 2026-05-31
 
 ### Changed
