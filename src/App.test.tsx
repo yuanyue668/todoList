@@ -534,6 +534,11 @@ describe("GitHub issues — todo controls", () => {
   it("allows setting and clearing a planned time before completion", () => {
     render(<App />);
 
+    expect(screen.queryByText("计划于")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("计划时间")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("清除计划时间")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("设置计划时间"));
+
     fireEvent.change(screen.getByLabelText("计划时间"), { target: { value: "2026-05-29T12:15" } });
     let saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
     expect(saved.pages[0].todos[0].completed).toBe(false);
@@ -544,7 +549,8 @@ describe("GitHub issues — todo controls", () => {
     fireEvent.click(screen.getByTitle("清除计划时间"));
     saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
     expect(saved.pages[0].todos[0].plannedAt).toBeNull();
-    expect(screen.getByText("计划于")).toBeInTheDocument();
+    expect(screen.queryByText("计划于")).not.toBeInTheDocument();
+    expect(screen.getByTitle("设置计划时间")).toBeInTheDocument();
   });
 
   it("applies a text style from the style toolbar", () => {
@@ -554,6 +560,20 @@ describe("GitHub issues — todo controls", () => {
 
     const saved = JSON.parse(localStorage.getItem("edge-todos-state-v1")!);
     expect(saved.pages[0].todos[0].style.bold).toBe(true);
+  });
+
+  it("closes the text style panel with Escape and outside clicks", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle("文字样式"));
+    expect(screen.getByTitle("粗体")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTitle("粗体")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("文字样式"));
+    expect(screen.getByTitle("粗体")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByTitle("粗体")).not.toBeInTheDocument();
   });
 
   it("applies underline, strike, color, highlight, and link styles from the toolbar", () => {

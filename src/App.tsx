@@ -1740,13 +1740,31 @@ function TodoPlannedAt({
   value: number | null;
   onChange: (value: number | null) => void;
 }) {
+  const [editing, setEditing] = useState(value !== null);
+
+  useEffect(() => {
+    if (value !== null) setEditing(true);
+  }, [value]);
+
+  if (value === null && !editing) {
+    return (
+      <button className="todo-time-add" onClick={() => setEditing(true)} title="设置计划时间">
+        <Plus size={12} />
+        设置计划时间
+      </button>
+    );
+  }
+
   return (
     <TodoTimeField
       label="计划于"
       ariaLabel="计划时间"
       clearTitle="清除计划时间"
       value={value}
-      onChange={onChange}
+      onChange={(nextValue) => {
+        onChange(nextValue);
+        if (nextValue === null) setEditing(false);
+      }}
     />
   );
 }
@@ -1821,6 +1839,7 @@ function TodoText({
   const [draft, setDraft] = useState(text);
   const [linkDraft, setLinkDraft] = useState(style.link);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const styleWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setDraft(text);
@@ -1836,6 +1855,29 @@ function TodoText({
       inputRef.current?.select();
     }
   }, [editing]);
+
+  useEffect(() => {
+    if (!styleOpen) return;
+
+    function handleOutsidePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && styleWrapRef.current?.contains(target)) return;
+      setStyleOpen(false);
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setStyleOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [styleOpen]);
 
   function save() {
     const nextText = draft.trim();
@@ -1875,7 +1917,7 @@ function TodoText({
   }
 
   return (
-    <div className="todo-text-wrap">
+    <div className="todo-text-wrap" ref={styleWrapRef}>
       <div
         className="todo-text-button"
         role="button"
@@ -1893,7 +1935,7 @@ function TodoText({
         onClick={() => setStyleOpen((open) => !open)}
         title="文字样式"
       >
-        <Palette size={14} />
+        <Palette size={16} />
       </button>
       {styleOpen && (
         <div className="todo-style-panel">

@@ -18,4 +18,11 @@ describe("GitHub issues - visual regressions", () => {
     expect(styles).toMatch(/\.page-tab\.is-active\s*\{[^}]*border-top-color:\s*#2563eb;/s);
     expect(styles).toMatch(/\.page-tab\.is-active\s*\{[^}]*inset 0 3px 0 #2563eb/s);
   });
+
+  it("keeps todo row action targets consistently sized and spaced", () => {
+    expect(styles).toMatch(/\.todo-style-toggle\s*\{[^}]*width:\s*28px;[^}]*height:\s*28px;/s);
+    expect(styles).toMatch(/\.delete-button\s*\{[^}]*width:\s*28px;[^}]*height:\s*28px;/s);
+    expect(styles).toMatch(/\.todo-actions\s*\{[^}]*gap:\s*6px;/s);
+    expect(styles).not.toMatch(/\.todo-actions\s*\{[^}]*width:\s*48px;/s);
+  });
 });
