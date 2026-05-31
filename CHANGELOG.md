@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-05-31
+
+### Changed
+- Todo rows now hide planned-time controls until the user chooses to set a planned time.
+- Todo row style, attachment, and delete action targets now use consistent sizing and spacing.
+
+### Fixed
+- Text style panels now close with `Esc` and outside clicks.
+
 ## [1.0.7] - 2026-05-31
 
 ### Added
